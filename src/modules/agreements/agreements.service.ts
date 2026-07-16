@@ -146,11 +146,28 @@ export class AgreementsService {
     });
   }
 
+  // ─── REQUEST TERMINATION (TENANT) ────────────
+  async requestTermination(tenantId: string, agreementId: string) {
+    const agreement = await this.prisma.rentalAgreement.findFirst({
+      where: { id: agreementId, tenant_id: tenantId, status: AgreementStatus.ACTIVE },
+    });
+    if (!agreement) throw new NotFoundException('Active rental agreement not found');
+
+    return this.prisma.rentalAgreement.update({
+      where: { id: agreementId },
+      data: { status: AgreementStatus.TERMINATION_REQUESTED },
+    });
+  }
+
   // ─── TERMINATE AGREEMENT ──────────────────────
   // Calculates the final invoice based on leaving_option set at creation time.
   async terminate(landlordId: string, agreementId: string, exitDate: Date) {
     const agreement = await this.prisma.rentalAgreement.findFirst({
-      where: { id: agreementId, landlord_id: landlordId, status: AgreementStatus.ACTIVE },
+      where: {
+        id: agreementId,
+        landlord_id: landlordId,
+        status: { in: [AgreementStatus.ACTIVE, AgreementStatus.TERMINATION_REQUESTED] },
+      },
       select: {
         id: true,
         rent_amount: true,
@@ -160,7 +177,7 @@ export class AgreementsService {
       },
     });
 
-    if (!agreement) throw new NotFoundException('Active agreement not found');
+    if (!agreement) throw new NotFoundException('Active or termination-pending agreement not found');
 
     // Determine final billing amount based on leaving_option (set at creation)
     const activeRule =

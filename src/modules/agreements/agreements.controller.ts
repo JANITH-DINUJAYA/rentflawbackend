@@ -84,6 +84,13 @@ export class AgreementsController {
     return this.agreementsService.findTenantHistory(user.id);
   }
 
+  @ApiOperation({ summary: 'Request agreement termination (request to leave) — Tenant only' })
+  @Patch(':id/request-termination')
+  @Roles(GlobalRole.TENANT)
+  requestTermination(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.agreementsService.requestTermination(user.id, id);
+  }
+
   @ApiOperation({ summary: 'Get single agreement details' })
   @Get(':id')
   findOne(@CurrentUser() user: any, @Param('id') id: string) {

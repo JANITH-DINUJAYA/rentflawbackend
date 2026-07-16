@@ -34,6 +34,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         is_active: true,
         tenant_code: true,
         credit_amount: true,
+        landlord_profile: {
+          select: {
+            id: true,
+          },
+        },
+        staff_profile: {
+          select: {
+            id: true,
+            landlord_id: true,
+          },
+        },
       },
     });
 

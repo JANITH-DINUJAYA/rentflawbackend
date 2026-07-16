@@ -2,9 +2,15 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../../database/prisma.service';
 import { enforceStaffLimit } from '../../common/middleware/subscription.middleware';
 
+import * as bcrypt from 'bcrypt';
+import { GlobalRole } from '@prisma/client';
+
 export interface AddStaffDto {
-  user_id: string;
+  email: string;
   role_id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
 }
 
 @Injectable()
@@ -25,10 +31,38 @@ export class StaffService {
     });
     if (!role) throw new ForbiddenException('Role not found or access denied');
 
+    // Find or create user by email
+    let user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      const defaultPasswordHash = await bcrypt.hash('StaffSecure123!', 12);
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          password_hash: defaultPasswordHash,
+          first_name: dto.first_name,
+          last_name: dto.last_name,
+          phone: dto.phone,
+          nic_or_passport: 'STAFF_PROVISIONED',
+          global_role: GlobalRole.STAFF,
+        },
+      });
+    } else {
+      // Check if user is already staff somewhere
+      const existingStaff = await this.prisma.staffProfile.findUnique({
+        where: { user_id: user.id },
+      });
+      if (existingStaff) {
+        throw new ForbiddenException('User is already assigned as staff for a property manager.');
+      }
+    }
+
     return this.prisma.staffProfile.create({
       data: {
         landlord_id: landlordId,
-        user_id: dto.user_id,
+        user_id: user.id,
         role_id: dto.role_id,
       },
     });

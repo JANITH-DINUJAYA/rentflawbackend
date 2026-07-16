@@ -71,6 +71,59 @@ async function main() {
   });
   console.log(`✅ Seeded Tenant User: ${tenantUser.email} (Tenant Code: ${tenantUser.tenant_code})`);
 
+  // 4. Seed Subscription Packages
+  console.log('📦 Seeding subscription packages...');
+  const starterPkg = await prisma.subscriptionPackage.upsert({
+    where: { name: 'Starter' },
+    update: {},
+    create: {
+      name: 'Starter',
+      price: 0,
+      max_properties: 2,
+      max_tenants: 20,
+      max_staff: 1,
+    },
+  });
+
+  const proPkg = await prisma.subscriptionPackage.upsert({
+    where: { name: 'Pro' },
+    update: {},
+    create: {
+      name: 'Pro',
+      price: 29.00,
+      max_properties: 10,
+      max_tenants: 100,
+      max_staff: 5,
+    },
+  });
+
+  const enterprisePkg = await prisma.subscriptionPackage.upsert({
+    where: { name: 'Enterprise' },
+    update: {},
+    create: {
+      name: 'Enterprise',
+      price: 79.00,
+      max_properties: 9999,
+      max_tenants: 9999,
+      max_staff: 9999,
+    },
+  });
+  console.log('✅ Subscription packages seeded.');
+
+  // 5. Link Starter subscription to seeded landlord
+  await prisma.landlordSubscription.upsert({
+    where: { landlord_id: landlordProfile.id },
+    update: {},
+    create: {
+      landlord_id: landlordProfile.id,
+      package_id: starterPkg.id,
+      status: 'ACTIVE',
+      start_date: new Date(),
+      end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    },
+  });
+  console.log('✅ Assigned Starter package to seeded landlord.');
+
   console.log('🌱 Seeding completed successfully!');
 }
 

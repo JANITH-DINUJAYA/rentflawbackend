@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AgreementStatus" ADD VALUE 'TERMINATION_REQUESTED';

@@ -48,6 +48,7 @@ enum AgreementStatus {
   ACTIVE
   EXPIRED
   TERMINATED
+  TERMINATION_REQUESTED
 }
 
 enum LeavingOption {
