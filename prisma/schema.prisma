@@ -1,0 +1,567 @@
+// RentFlaw — Prisma Schema
+// Database: PostgreSQL (Neon)
+// Normalization: 3NF
+// All PKs are UUIDs. Soft deletes via is_archived. No destructive deletes on operational data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum GlobalRole {
+  SAAS_ADMIN
+  LANDLORD
+  TENANT
+  STAFF
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+}
+
+enum PropertyType {
+  BOARDING_HOUSE
+  HOSTEL
+  RENTAL_HOUSE
+  APARTMENT
+}
+
+enum OccupancyType {
+  ENTIRE
+  SHARED
+}
+
+enum AgreementStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum LeavingOption {
+  PAY_STAY_DATES
+  PAY_FULL_MONTH
+  DECIDE_IN_AGREEMENT
+}
+
+enum InvoiceType {
+  RENT
+  UTILITY
+  LATE_FEE
+  DAMAGE
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum PaymentSubmissionStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum UtilityType {
+  WATER
+  ELECTRICITY
+  INTERNET
+  CLEANING
+  FURNITURE
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum LandlordSubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+}
+
+// ─────────────────────────────────────────────
+// TABLE 1: Users
+// Core identity store for all platform roles.
+// Tenants are global — one account reused across landlords.
+// ─────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(uuid()) @db.VarChar(36)
+  email          String     @unique @db.VarChar(255)
+  password_hash  String     @db.VarChar(255)
+  first_name     String     @db.VarChar(100)
+  last_name      String     @db.VarChar(100)
+  phone          String     @db.VarChar(20)
+  nic_or_passport String    @db.VarChar(50)
+  is_active      Boolean    @default(true)
+  global_role    GlobalRole
+  // Unique referral code for tenants — landlords use this to search and invite
+  tenant_code    String?    @unique @db.VarChar(20)
+  // Credit held for overpayments — auto-applied to next invoice
+  credit_amount  Decimal    @default(0.00) @db.Decimal(10, 2)
+  created_at     DateTime   @default(now())
+  updated_at     DateTime   @updatedAt
+
+  // Relations
+  landlord_profile    Landlord?
+  staff_profile       StaffProfile?
+  rental_agreements   RentalAgreement[]   @relation("TenantAgreements")
+  payment_submissions PaymentSubmission[] @relation("TenantPayments")
+  reviewed_payments   PaymentSubmission[] @relation("ReviewedPayments")
+  support_tickets     SupportTicket[]
+
+  @@index([email])
+  @@index([tenant_code])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 2: Landlords
+// Extended profile for LANDLORD-role users.
+// 1:1 with Users.
+// ─────────────────────────────────────────────
+
+model Landlord {
+  id                  String             @id @default(uuid()) @db.VarChar(36)
+  user_id             String             @unique @db.VarChar(36)
+  company_name        String?            @db.VarChar(150)
+  subscription_status SubscriptionStatus @default(TRIAL)
+  subscription_end    DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  user              User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  custom_roles      CustomRole[]
+  staff_profiles    StaffProfile[]
+  properties        Property[]
+  rental_agreements RentalAgreement[] @relation("LandlordAgreements")
+  invoices          Invoice[]
+  utility_bills     UtilityBill[]
+  subscription      LandlordSubscription?
+
+  @@index([user_id])
+  @@map("landlords")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 3: CustomRoles
+// RBAC roles created by landlords (Manager, Accountant, etc.)
+// ─────────────────────────────────────────────
+
+model CustomRole {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  landlord_id String   @db.VarChar(36)
+  name        String   @db.VarChar(50)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  landlord      Landlord       @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+  permissions   Permission[]
+  staff_profiles StaffProfile[]
+
+  @@index([landlord_id])
+  @@map("custom_roles")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 4: Permissions
+// Fine-grained permission keys mapped to custom roles.
+// ─────────────────────────────────────────────
+
+model Permission {
+  id      String @id @default(uuid()) @db.VarChar(36)
+  role_id String @db.VarChar(36)
+  // e.g. READ_PAYMENTS, MANAGE_ROOMS, APPROVE_PAYMENTS
+  action  String @db.VarChar(100)
+
+  created_at DateTime @default(now())
+
+  // Relations
+  role CustomRole @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@index([role_id])
+  @@map("permissions")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 5: StaffProfiles
+// Associates STAFF-role users with a landlord space and custom role.
+// ─────────────────────────────────────────────
+
+model StaffProfile {
+  id          String @id @default(uuid()) @db.VarChar(36)
+  user_id     String @unique @db.VarChar(36)
+  landlord_id String @db.VarChar(36)
+  role_id     String @db.VarChar(36)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  user     User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  landlord Landlord   @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+  role     CustomRole @relation(fields: [role_id], references: [id])
+
+  @@index([landlord_id])
+  @@index([role_id])
+  @@map("staff_profiles")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 6: Properties
+// Multi-tenant properties managed by landlords.
+// Archive instead of delete when active tenants/agreements exist.
+// ─────────────────────────────────────────────
+
+model Property {
+  id          String       @id @default(uuid()) @db.VarChar(36)
+  landlord_id String       @db.VarChar(36)
+  name        String       @db.VarChar(150)
+  address     String       @db.Text
+  type        PropertyType
+  is_archived Boolean      @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord  Landlord          @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+  floors    Floor[]
+  agreements RentalAgreement[]
+
+  @@index([landlord_id])
+  @@index([landlord_id, is_archived])
+  @@map("properties")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 7: Floors
+// Building levels within properties.
+// ─────────────────────────────────────────────
+
+model Floor {
+  id          String  @id @default(uuid()) @db.VarChar(36)
+  property_id String  @db.VarChar(36)
+  name        String  @db.VarChar(50)
+  is_archived Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  property Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  rooms    Room[]
+
+  @@index([property_id])
+  @@map("floors")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 8: Rooms
+// Rentable units on specific floors.
+// ENTIRE = single tenant. SHARED = capacity-based bed spaces.
+// ─────────────────────────────────────────────
+
+model Room {
+  id            String        @id @default(uuid()) @db.VarChar(36)
+  floor_id      String        @db.VarChar(36)
+  room_number   String        @db.VarChar(50)
+  occupancy_type OccupancyType
+  // For SHARED rooms — total bed spaces available
+  capacity      Int           @default(1)
+  base_rent     Decimal       @db.Decimal(10, 2)
+  is_archived   Boolean       @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  floor      Floor             @relation(fields: [floor_id], references: [id], onDelete: Cascade)
+  agreements RentalAgreement[]
+
+  @@index([floor_id])
+  @@map("rooms")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 9: RentalAgreements
+// Central hub entity linking Landlord + Tenant + Property + Room.
+// leaving_option is set at creation — not at exit.
+// ─────────────────────────────────────────────
+
+model RentalAgreement {
+  id                String          @id @default(uuid()) @db.VarChar(36)
+  landlord_id       String          @db.VarChar(36)
+  tenant_id         String          @db.VarChar(36)
+  property_id       String          @db.VarChar(36)
+  room_id           String          @db.VarChar(36)
+  rent_amount       Decimal         @db.Decimal(10, 2)
+  security_deposit  Decimal         @db.Decimal(10, 2)
+  start_date        DateTime        @db.Date
+  end_date          DateTime        @db.Date
+  // Calendar day (1-28) when monthly invoices auto-generate
+  collection_day    Int             @default(1)
+  // Days after collection_day before late fees apply
+  grace_period_days Int             @default(3)
+  late_fee_flat     Decimal         @default(0.00) @db.Decimal(10, 2)
+  // Set at agreement creation — defines how final month is billed on exit
+  // DECIDE_IN_AGREEMENT means landlord chose a specific rule at creation time
+  leaving_option    LeavingOption
+  // If leaving_option = DECIDE_IN_AGREEMENT, this stores the actual chosen rule
+  leaving_rule      LeavingOption?
+  status            AgreementStatus @default(DRAFT)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord       Landlord        @relation("LandlordAgreements", fields: [landlord_id], references: [id])
+  tenant         User            @relation("TenantAgreements", fields: [tenant_id], references: [id])
+  property       Property        @relation(fields: [property_id], references: [id])
+  room           Room            @relation(fields: [room_id], references: [id])
+  invoices       Invoice[]
+  deposit_refund DepositRefund?
+
+  @@index([landlord_id])
+  @@index([tenant_id])
+  @@index([room_id])
+  @@index([status])
+  // Critical index for daily invoice cron job
+  @@index([collection_day, status])
+  @@map("rental_agreements")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 10: Invoices
+// Auto-generated monthly billing records per agreement.
+// Payments reduce oldest OVERDUE invoice first (FIFO).
+// ─────────────────────────────────────────────
+
+model Invoice {
+  id                   String        @id @default(uuid()) @db.VarChar(36)
+  landlord_id          String        @db.VarChar(36)
+  agreement_id         String        @db.VarChar(36)
+  type                 InvoiceType   @default(RENT)
+  status               InvoiceStatus @default(PENDING)
+  amount               Decimal       @db.Decimal(10, 2)
+  discount             Decimal       @default(0.00) @db.Decimal(10, 2)
+  late_fee_applied     Decimal       @default(0.00) @db.Decimal(10, 2)
+  // total_due = amount - discount + late_fee_applied
+  total_due            Decimal       @db.Decimal(10, 2)
+  due_date             DateTime      @db.Date
+  billing_period_start DateTime      @db.Date
+  billing_period_end   DateTime      @db.Date
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord            Landlord            @relation(fields: [landlord_id], references: [id])
+  agreement           RentalAgreement     @relation(fields: [agreement_id], references: [id])
+  payment_submissions PaymentSubmission[]
+  utility_bill        UtilityBill?
+
+  @@index([landlord_id])
+  @@index([agreement_id])
+  @@index([status, due_date])
+  // Index for overdue detection job
+  @@index([landlord_id, status])
+  @@map("invoices")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 11: PaymentSubmissions
+// Manual receipt uploads by tenants for landlord verification.
+// is_locked = true after approval — receipt cannot be replaced.
+// ─────────────────────────────────────────────
+
+model PaymentSubmission {
+  id           String                  @id @default(uuid()) @db.VarChar(36)
+  invoice_id   String                  @db.VarChar(36)
+  tenant_id    String                  @db.VarChar(36)
+  amount_paid  Decimal                 @db.Decimal(10, 2)
+  payment_date DateTime
+  // Cloudflare R2 / S3 URL of uploaded proof
+  receipt_url  String                  @db.VarChar(512)
+  // Locked after approval — prevents re-upload or tampering
+  is_locked    Boolean                 @default(false)
+  status       PaymentSubmissionStatus @default(PENDING_REVIEW)
+  notes        String?                 @db.Text
+  // Landlord or staff member who reviewed this submission
+  reviewed_by  String?                 @db.VarChar(36)
+  reviewed_at  DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  invoice  Invoice @relation(fields: [invoice_id], references: [id])
+  tenant   User    @relation("TenantPayments", fields: [tenant_id], references: [id])
+  reviewer User?   @relation("ReviewedPayments", fields: [reviewed_by], references: [id])
+
+  @@index([invoice_id])
+  @@index([tenant_id])
+  @@index([status])
+  @@map("payment_submissions")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 12: UtilityBills
+// Tracks metered utility consumption linked to invoices.
+// 1:1 optional with Invoices.
+// ─────────────────────────────────────────────
+
+model UtilityBill {
+  id                     String      @id @default(uuid()) @db.VarChar(36)
+  landlord_id            String      @db.VarChar(36)
+  invoice_id             String      @unique @db.VarChar(36)
+  type                   UtilityType
+  meter_reading_previous Decimal?    @db.Decimal(10, 2)
+  meter_reading_current  Decimal?    @db.Decimal(10, 2)
+  rate_per_unit          Decimal?    @db.Decimal(10, 2)
+  // Derived: (current - previous) * rate_per_unit, or flat amount
+  amount                 Decimal     @db.Decimal(10, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord Landlord @relation(fields: [landlord_id], references: [id])
+  invoice  Invoice  @relation(fields: [invoice_id], references: [id])
+
+  @@index([landlord_id])
+  @@map("utility_bills")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 13: DepositRefunds
+// Audit log for security deposit processing on agreement exit.
+// 1:1 with RentalAgreements — processed once at termination.
+// ─────────────────────────────────────────────
+
+model DepositRefund {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  agreement_id String   @unique @db.VarChar(36)
+  refund_amount Decimal @db.Decimal(10, 2)
+  deductions   Decimal  @default(0.00) @db.Decimal(10, 2)
+  // Itemized breakdown of deductions (damages, unpaid rent, etc.)
+  reason       String?  @db.Text
+  processed_at DateTime
+
+  created_at DateTime @default(now())
+
+  // Relations
+  agreement RentalAgreement @relation(fields: [agreement_id], references: [id])
+
+  @@map("deposit_refunds")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 14: SupportTickets
+// Maintenance requests raised by tenants.
+// ─────────────────────────────────────────────
+
+model SupportTicket {
+  id          String         @id @default(uuid()) @db.VarChar(36)
+  tenant_id   String         @db.VarChar(36)
+  // Plumbing, Electrical, Cleaning, Furniture, Internet
+  category    String         @db.VarChar(50)
+  description String         @db.Text
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  resolved_at DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  tenant User @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 15: SubscriptionPackages
+// SaaS pricing tiers managed by SaaS Admin.
+// Defines hard limits per landlord account.
+// ─────────────────────────────────────────────
+
+model SubscriptionPackage {
+  id             String       @id @default(uuid()) @db.VarChar(36)
+  name           String       @unique @db.VarChar(50)
+  price          Decimal      @db.Decimal(10, 2)
+  billing_cycle  BillingCycle @default(MONTHLY)
+  max_properties Int
+  max_tenants    Int
+  max_staff      Int
+  is_active      Boolean      @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord_subscriptions LandlordSubscription[]
+
+  @@map("subscription_packages")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 16: LandlordSubscriptions
+// Junction table mapping landlords to active subscription package.
+// Unique on landlord_id — enforces 1 active plan per landlord.
+// ─────────────────────────────────────────────
+
+model LandlordSubscription {
+  id          String                     @id @default(uuid()) @db.VarChar(36)
+  landlord_id String                     @unique @db.VarChar(36)
+  package_id  String                     @db.VarChar(36)
+  status      LandlordSubscriptionStatus @default(TRIAL)
+  start_date  DateTime
+  end_date    DateTime
+  // Enables automated billing renewal via BullMQ job
+  auto_renew  Boolean                    @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  landlord Landlord            @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+  package  SubscriptionPackage @relation(fields: [package_id], references: [id])
+
+  @@index([status, end_date])
+  @@map("landlord_subscriptions")
+}
