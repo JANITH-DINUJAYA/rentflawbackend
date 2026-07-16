@@ -40,14 +40,19 @@ export class PropertiesService {
   }
 
   // ─── LIST PROPERTIES ───────────────────────────
-  async findAll(landlordId: string, includeArchived = false) {
+  async findAll(landlordId: string | null, includeArchived = false) {
     return this.prisma.property.findMany({
       where: {
-        landlord_id: landlordId,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
         is_archived: includeArchived ? undefined : false,
       },
       orderBy: { created_at: 'desc' },
       include: {
+        landlord: {
+          include: {
+            user: { select: { first_name: true, last_name: true, email: true } }
+          }
+        },
         floors: {
           where: { is_archived: false },
           include: {
@@ -62,10 +67,18 @@ export class PropertiesService {
   }
 
   // ─── GET SINGLE PROPERTY ──────────────────────
-  async findOne(landlordId: string, propertyId: string) {
+  async findOne(landlordId: string | null, propertyId: string) {
     const property = await this.prisma.property.findFirst({
-      where: { id: propertyId, landlord_id: landlordId },
+      where: {
+        id: propertyId,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
       include: {
+        landlord: {
+          include: {
+            user: { select: { first_name: true, last_name: true, email: true } }
+          }
+        },
         floors: {
           where: { is_archived: false },
           include: {
@@ -81,7 +94,7 @@ export class PropertiesService {
 
   // ─── UPDATE PROPERTY ──────────────────────────
   async update(
-    landlordId: string,
+    landlordId: string | null,
     propertyId: string,
     dto: { name?: string; address?: string; type?: PropertyType },
   ) {
@@ -94,8 +107,8 @@ export class PropertiesService {
 
   // ─── ARCHIVE PROPERTY ─────────────────────────
   // Blocks archiving if active tenants or pending invoices exist
-  async archive(landlordId: string, propertyId: string) {
-    await this.findOne(landlordId, propertyId);
+  async archive(landlordId: string | null, propertyId: string) {
+    const property = await this.findOne(landlordId, propertyId);
 
     const activeAgreements = await this.prisma.rentalAgreement.count({
       where: { property_id: propertyId, status: 'ACTIVE' },
@@ -109,7 +122,7 @@ export class PropertiesService {
 
     const pendingInvoices = await this.prisma.invoice.count({
       where: {
-        landlord_id: landlordId,
+        ...(property.landlord_id ? { landlord_id: property.landlord_id } : {}),
         agreement: { property_id: propertyId },
         status: { in: ['PENDING', 'OVERDUE'] },
       },

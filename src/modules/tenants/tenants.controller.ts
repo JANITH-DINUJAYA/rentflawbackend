@@ -1,6 +1,11 @@
 import {
   Controller,
   Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -25,6 +30,22 @@ export class TenantsController {
     return this.tenantsService.findAllForAdmin();
   }
 
+  @ApiOperation({ summary: 'Create a new tenant — Admin only' })
+  @Post()
+  @Roles(GlobalRole.SAAS_ADMIN)
+  create(
+    @Body() dto: {
+      email: string;
+      first_name: string;
+      last_name: string;
+      phone: string;
+      nic_or_passport: string;
+      password?: string;
+    },
+  ) {
+    return this.tenantsService.create(dto);
+  }
+
   @ApiOperation({ summary: 'List tenants under this landlord — Landlord/Staff' })
   @Get('my-tenants')
   @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
@@ -38,5 +59,29 @@ export class TenantsController {
   @Roles(GlobalRole.TENANT)
   getProfile(@CurrentUser() user: any) {
     return this.tenantsService.getTenantProfile(user.id);
+  }
+
+  @ApiOperation({ summary: 'Update a specific tenant — Admin only' })
+  @Patch(':id')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  update(
+    @Param('id') id: string,
+    @Body() dto: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      nic_or_passport?: string;
+      email?: string;
+      is_active?: boolean;
+    },
+  ) {
+    return this.tenantsService.update(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Delete a specific tenant — Admin only' })
+  @Delete(':id')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  delete(@Param('id') id: string) {
+    return this.tenantsService.delete(id);
   }
 }

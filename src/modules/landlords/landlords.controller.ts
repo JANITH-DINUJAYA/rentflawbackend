@@ -1,8 +1,11 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
+  Delete,
   Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -27,6 +30,23 @@ export class LandlordsController {
     return this.landlordsService.findAll();
   }
 
+  @ApiOperation({ summary: 'Create a new landlord — Admin only' })
+  @Post()
+  @Roles(GlobalRole.SAAS_ADMIN)
+  create(
+    @Body() dto: {
+      email: string;
+      first_name: string;
+      last_name: string;
+      phone: string;
+      nic_or_passport: string;
+      password?: string;
+      company_name?: string;
+    },
+  ) {
+    return this.landlordsService.create(dto);
+  }
+
   @ApiOperation({ summary: 'Get landlord/staff profile' })
   @Get('profile')
   @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
@@ -44,5 +64,29 @@ export class LandlordsController {
   ) {
     const landlordId = user.landlord_profile?.id;
     return this.landlordsService.update(landlordId, dto);
+  }
+
+  @ApiOperation({ summary: 'Update specific landlord details — Admin only' })
+  @Patch(':id')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  update(
+    @Param('id') id: string,
+    @Body() dto: {
+      company_name?: string;
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      nic_or_passport?: string;
+      email?: string;
+    },
+  ) {
+    return this.landlordsService.update(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Delete landlord details — Admin only' })
+  @Delete(':id')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  delete(@Param('id') id: string) {
+    return this.landlordsService.delete(id);
   }
 }

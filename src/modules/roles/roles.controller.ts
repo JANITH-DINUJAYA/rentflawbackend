@@ -18,37 +18,40 @@ import { GlobalRole } from '@prisma/client';
 @ApiTags('Roles')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
-@Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+@Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
 @Controller('roles')
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
-  @ApiOperation({ summary: 'List all roles for the landlord' })
+  private getLandlordId(user: any): string | null {
+    if (user.global_role === GlobalRole.SAAS_ADMIN) {
+      return null;
+    }
+    return user.landlord_profile?.id || user.staff_profile?.landlord_id;
+  }
+
+  @ApiOperation({ summary: 'List all roles' })
   @Get()
   findAll(@CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.findAllRoles(landlordId);
+    return this.rolesService.findAllRoles(this.getLandlordId(user));
   }
 
   @ApiOperation({ summary: 'Get a single role with permissions' })
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.getRoleWithPermissions(id, landlordId);
+    return this.rolesService.getRoleWithPermissions(id, this.getLandlordId(user));
   }
 
   @ApiOperation({ summary: 'Create a new role' })
   @Post()
   create(@CurrentUser() user: any, @Body() body: { name: string }) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.createRole(landlordId, body.name);
+    return this.rolesService.createRole(this.getLandlordId(user), body.name);
   }
 
   @ApiOperation({ summary: 'Delete a role' })
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.deleteRole(id, landlordId);
+    return this.rolesService.deleteRole(id, this.getLandlordId(user));
   }
 
   @ApiOperation({ summary: 'Add a permission to a role' })
@@ -58,8 +61,7 @@ export class RolesController {
     @CurrentUser() user: any,
     @Body() body: { action: string },
   ) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.addPermission(id, landlordId, body.action);
+    return this.rolesService.addPermission(id, this.getLandlordId(user), body.action);
   }
 
   @ApiOperation({ summary: 'Remove a permission from a role' })
@@ -68,7 +70,6 @@ export class RolesController {
     @Param('permissionId') permissionId: string,
     @CurrentUser() user: any,
   ) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.rolesService.removePermission(permissionId, landlordId);
+    return this.rolesService.removePermission(permissionId, this.getLandlordId(user));
   }
 }

@@ -22,6 +22,13 @@ import { GlobalRole, PropertyType } from '@prisma/client';
 export class PropertiesController {
   constructor(private propertiesService: PropertiesService) {}
 
+  private getLandlordId(user: any): string | null {
+    if (user.global_role === GlobalRole.SAAS_ADMIN) {
+      return null;
+    }
+    return user.landlord_profile?.id || user.staff_profile?.landlord_id;
+  }
+
   @ApiOperation({ summary: 'Create property — Landlord only' })
   @Post()
   @Roles(GlobalRole.LANDLORD)
@@ -29,42 +36,39 @@ export class PropertiesController {
     @CurrentUser() user: any,
     @Body() dto: { name: string; address: string; type: PropertyType },
   ) {
-    return this.propertiesService.create(user.id, dto);
+    const landlordId = user.landlord_profile?.id;
+    return this.propertiesService.create(landlordId, dto);
   }
 
-  @ApiOperation({ summary: 'List all properties for landlord' })
+  @ApiOperation({ summary: 'List all properties' })
   @Get()
-  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   findAll(@CurrentUser() user: any) {
-    // If staff, we would need to map user to their landlord_id.
-    // For simplicity, we check if user has a landlord profile or staff profile
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.propertiesService.findAll(landlordId);
+    return this.propertiesService.findAll(this.getLandlordId(user));
   }
 
   @ApiOperation({ summary: 'Get single property details' })
   @Get(':id')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.propertiesService.findOne(landlordId, id);
+    return this.propertiesService.findOne(this.getLandlordId(user), id);
   }
 
   @ApiOperation({ summary: 'Update property details' })
   @Patch(':id')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
   update(
     @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() dto: { name?: string; address?: string; type?: PropertyType },
   ) {
-    return this.propertiesService.update(user.id, id, dto);
+    return this.propertiesService.update(this.getLandlordId(user), id, dto);
   }
 
   @ApiOperation({ summary: 'Soft archive a property' })
   @Patch(':id/archive')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
   archive(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.propertiesService.archive(user.id, id);
+    return this.propertiesService.archive(this.getLandlordId(user), id);
   }
 }

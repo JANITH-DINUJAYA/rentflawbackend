@@ -54,25 +54,36 @@ export class AgreementsController {
     return this.agreementsService.activate(user.landlord_profile.id, id);
   }
 
+  @ApiOperation({ summary: 'Accept lease invitation — Tenant only' })
+  @Patch(':id/accept-invitation')
+  @Roles(GlobalRole.TENANT)
+  acceptInvitation(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.agreementsService.acceptInvitation(user.id, id);
+  }
+
   @ApiOperation({ summary: 'Terminate active agreement with proration exit calculations' })
   @Patch(':id/terminate')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
   terminate(
     @CurrentUser() user: any,
     @Param('id') id: string,
     @Body() dto: { exit_date: Date },
   ) {
+    const landlordId = user.global_role === GlobalRole.SAAS_ADMIN ? null : user.landlord_profile.id;
     return this.agreementsService.terminate(
-      user.landlord_profile.id,
+      landlordId,
       id,
       new Date(dto.exit_date),
     );
   }
 
-  @ApiOperation({ summary: 'List landlord agreements' })
+  @ApiOperation({ summary: 'List landlord/admin agreements' })
   @Get()
-  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   findAll(@CurrentUser() user: any, @Query('status') status?: AgreementStatus) {
+    if (user.global_role === GlobalRole.SAAS_ADMIN) {
+      return this.agreementsService.findAllAdmin(status);
+    }
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.agreementsService.findAll(landlordId, status);
   }
@@ -98,3 +109,4 @@ export class AgreementsController {
     return this.agreementsService.findOne(landlordId, id);
   }
 }
+

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -65,4 +65,40 @@ export class SubscriptionsService {
     if (!sub) throw new NotFoundException('No active subscription found');
     return sub;
   }
+
+  async cancelSubscription(landlordId: string) {
+    // Delete the landlord's subscription record
+    try {
+      return await this.prisma.landlordSubscription.delete({
+        where: { landlord_id: landlordId },
+      });
+    } catch {
+      throw new NotFoundException('No active subscription found to cancel');
+    }
+  }
+
+  async deletePackage(packageId: string) {
+    const pkg = await this.prisma.subscriptionPackage.findUnique({
+      where: { id: packageId },
+    });
+    if (!pkg) throw new NotFoundException('Subscription package not found');
+
+    // Block deletion if any landlord currently has an active subscription on this package
+    const ongoingCount = await this.prisma.landlordSubscription.count({
+      where: {
+        package_id: packageId,
+        status: 'ACTIVE',
+      },
+    });
+    if (ongoingCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete: ${ongoingCount} landlord(s) currently have an active subscription on this package.`,
+      );
+    }
+
+    return this.prisma.subscriptionPackage.delete({
+      where: { id: packageId },
+    });
+  }
 }
+

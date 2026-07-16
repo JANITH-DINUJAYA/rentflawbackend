@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { GlobalRole } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class TenantsService {
@@ -55,8 +57,14 @@ export class TenantsService {
     return this.prisma.user.findMany({
       where: { global_role: GlobalRole.TENANT },
       include: {
-        rental_agreements: true,
+        rental_agreements: {
+          include: {
+            property: true,
+            room: true,
+          },
+        },
       },
+      orderBy: { created_at: 'desc' },
     });
   }
 
@@ -84,5 +92,88 @@ export class TenantsService {
         },
       },
     });
+  }
+
+  async create(dto: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+    nic_or_passport: string;
+    password?: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing) {
+      throw new ConflictException('Email already registered');
+    }
+
+    const password = dto.password || 'TenantSecure123!';
+    const passwordHash = await bcrypt.hash(password, 12);
+    const tenantCode = await this.generateUniqueTenantCode();
+
+    return this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password_hash: passwordHash,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        phone: dto.phone,
+        nic_or_passport: dto.nic_or_passport,
+        global_role: GlobalRole.TENANT,
+        tenant_code: tenantCode,
+      },
+    });
+  }
+
+  async update(id: string, dto: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    nic_or_passport?: string;
+    email?: string;
+    is_active?: boolean;
+  }) {
+    const tenant = await this.prisma.user.findFirst({
+      where: { id, global_role: GlobalRole.TENANT },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    if (dto.email && dto.email !== tenant.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existing) throw new ConflictException('Email already in use');
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async delete(id: string) {
+    const tenant = await this.prisma.user.findFirst({
+      where: { id, global_role: GlobalRole.TENANT },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    return this.prisma.user.delete({
+      where: { id },
+    });
+  }
+
+  private async generateUniqueTenantCode(): Promise<string> {
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const code = uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase();
+      const exists = await this.prisma.user.findUnique({
+        where: { tenant_code: code },
+        select: { id: true },
+      });
+      if (!exists) return code;
+    }
+    throw new BadRequestException('Failed to generate unique tenant code');
   }
 }

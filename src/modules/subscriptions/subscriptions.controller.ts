@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
+  Param,
   Body,
   UseGuards,
 } from '@nestjs/common';
@@ -53,4 +55,20 @@ export class SubscriptionsController {
     const landlordId = user.landlord_profile?.id;
     return this.subscriptionsService.assignSubscription(landlordId, dto.packageId);
   }
+
+  @ApiOperation({ summary: 'Cancel current subscription — Landlord only' })
+  @Post('cancel')
+  @Roles(GlobalRole.LANDLORD)
+  cancelSubscription(@CurrentUser() user: any) {
+    const landlordId = user.landlord_profile.id;
+    return this.subscriptionsService.cancelSubscription(landlordId);
+  }
+
+  @ApiOperation({ summary: 'Delete a subscription package — Admin only (blocked if any active subscriptions exist on it)' })
+  @Delete('packages/:id')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  deletePackage(@Param('id') id: string) {
+    return this.subscriptionsService.deletePackage(id);
+  }
 }
+

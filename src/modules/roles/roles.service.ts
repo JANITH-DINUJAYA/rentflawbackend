@@ -5,7 +5,7 @@ import { PrismaService } from '../../database/prisma.service';
 export class RolesService {
   constructor(private prisma: PrismaService) {}
 
-  async createRole(landlordId: string, name: string) {
+  async createRole(landlordId: string | null, name: string) {
     return this.prisma.customRole.create({
       data: {
         landlord_id: landlordId,
@@ -14,8 +14,8 @@ export class RolesService {
     });
   }
 
-  async addPermission(roleId: string, landlordId: string, action: string) {
-    // Validate role belongs to landlord
+  async addPermission(roleId: string, landlordId: string | null, action: string) {
+    // Validate role belongs to landlord/system
     const role = await this.prisma.customRole.findFirst({
       where: { id: roleId, landlord_id: landlordId },
     });
@@ -29,7 +29,7 @@ export class RolesService {
     });
   }
 
-  async removePermission(permissionId: string, landlordId: string) {
+  async removePermission(permissionId: string, landlordId: string | null) {
     const perm = await this.prisma.permission.findFirst({
       where: {
         id: permissionId,
@@ -43,7 +43,7 @@ export class RolesService {
     });
   }
 
-  async getRoleWithPermissions(roleId: string, landlordId: string) {
+  async getRoleWithPermissions(roleId: string, landlordId: string | null) {
     const role = await this.prisma.customRole.findFirst({
       where: { id: roleId, landlord_id: landlordId },
       include: { permissions: true },
@@ -52,7 +52,7 @@ export class RolesService {
     return role;
   }
 
-  async deleteRole(roleId: string, landlordId: string) {
+  async deleteRole(roleId: string, landlordId: string | null) {
     const role = await this.prisma.customRole.findFirst({
       where: { id: roleId, landlord_id: landlordId },
     });
@@ -71,7 +71,7 @@ export class RolesService {
     });
   }
 
-  async findAllRoles(landlordId: string) {
+  async findAllRoles(landlordId: string | null) {
     return this.prisma.customRole.findMany({
       where: { landlord_id: landlordId },
       include: { permissions: true },

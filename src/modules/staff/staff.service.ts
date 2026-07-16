@@ -17,19 +17,27 @@ export interface AddStaffDto {
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async addStaff(landlordId: string, dto: AddStaffDto) {
-    const sub = await this.prisma.landlordSubscription.findUnique({
-      where: { landlord_id: landlordId },
-      include: { package: { select: { max_staff: true } } },
-    });
-    if (!sub) throw new ForbiddenException('No active subscription found');
+  async addStaff(landlordId: string | null, dto: AddStaffDto) {
+    if (landlordId !== null) {
+      const sub = await this.prisma.landlordSubscription.findUnique({
+        where: { landlord_id: landlordId },
+        include: { package: { select: { max_staff: true } } },
+      });
+      if (!sub) throw new ForbiddenException('No active subscription found');
 
-    await enforceStaffLimit(this.prisma, landlordId, sub.package.max_staff);
+      await enforceStaffLimit(this.prisma, landlordId, sub.package.max_staff);
 
-    const role = await this.prisma.customRole.findFirst({
-      where: { id: dto.role_id, landlord_id: landlordId },
-    });
-    if (!role) throw new ForbiddenException('Role not found or access denied');
+      const role = await this.prisma.customRole.findFirst({
+        where: { id: dto.role_id, landlord_id: landlordId },
+      });
+      if (!role) throw new ForbiddenException('Role not found or access denied');
+    } else {
+      // System staff role validation
+      const role = await this.prisma.customRole.findFirst({
+        where: { id: dto.role_id, landlord_id: null },
+      });
+      if (!role) throw new ForbiddenException('System Role not found');
+    }
 
     // Find or create user by email
     let user = await this.prisma.user.findUnique({
@@ -46,7 +54,7 @@ export class StaffService {
           last_name: dto.last_name,
           phone: dto.phone,
           nic_or_passport: 'STAFF_PROVISIONED',
-          global_role: GlobalRole.STAFF,
+          global_role: landlordId === null ? GlobalRole.SAAS_ADMIN : GlobalRole.STAFF,
         },
       });
     } else {
@@ -55,7 +63,7 @@ export class StaffService {
         where: { user_id: user.id },
       });
       if (existingStaff) {
-        throw new ForbiddenException('User is already assigned as staff for a property manager.');
+        throw new ForbiddenException('User is already assigned as staff.');
       }
     }
 
@@ -68,9 +76,12 @@ export class StaffService {
     });
   }
 
-  async removeStaff(landlordId: string, staffId: string) {
+  async removeStaff(landlordId: string | null, staffId: string) {
     const member = await this.prisma.staffProfile.findFirst({
-      where: { id: staffId, landlord_id: landlordId },
+      where: {
+        id: staffId,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
     });
     if (!member) throw new NotFoundException('Staff member not found');
 
@@ -79,7 +90,7 @@ export class StaffService {
     });
   }
 
-  async getStaff(landlordId: string) {
+  async getStaff(landlordId: string | null) {
     return this.prisma.staffProfile.findMany({
       where: { landlord_id: landlordId },
       include: {

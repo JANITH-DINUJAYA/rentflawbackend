@@ -19,29 +19,33 @@ import { GlobalRole } from '@prisma/client';
 @ApiTags('Staff')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
-@Roles(GlobalRole.LANDLORD)
+@Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
-  @ApiOperation({ summary: 'List all staff for this landlord' })
+  private getLandlordId(user: any): string | null {
+    if (user.global_role === GlobalRole.SAAS_ADMIN) {
+      return null;
+    }
+    return user.landlord_profile?.id || user.staff_profile?.landlord_id;
+  }
+
+  @ApiOperation({ summary: 'List all staff' })
   @Get()
   getStaff(@CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.staffService.getStaff(landlordId);
+    return this.staffService.getStaff(this.getLandlordId(user));
   }
 
   @ApiOperation({ summary: 'Add a new staff member' })
   @Post()
   addStaff(@CurrentUser() user: any, @Body() body: AddStaffDto) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.staffService.addStaff(landlordId, body);
+    return this.staffService.addStaff(this.getLandlordId(user), body);
   }
 
   @ApiOperation({ summary: 'Remove a staff member' })
   @Delete(':id')
   removeStaff(@Param('id') id: string, @CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.staffService.removeStaff(landlordId, id);
+    return this.staffService.removeStaff(this.getLandlordId(user), id);
   }
 }

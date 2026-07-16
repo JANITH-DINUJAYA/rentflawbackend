@@ -24,6 +24,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { SupportModule } from './modules/support/support.module';
 import { FilesModule } from './modules/files/files.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { JobsModule } from './jobs/jobs.module';
 
 @Module({
@@ -67,6 +68,7 @@ import { JobsModule } from './jobs/jobs.module';
     SupportModule,
     FilesModule,
     NotificationsModule,
+    MessagesModule,
     JobsModule,
   ],
   providers: [
@@ -78,3 +80,4 @@ import { JobsModule } from './jobs/jobs.module';
   ],
 })
 export class AppModule {}
+
