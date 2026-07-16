@@ -70,4 +70,11 @@ export class RolesService {
       where: { id: roleId },
     });
   }
+
+  async findAllRoles(landlordId: string) {
+    return this.prisma.customRole.findMany({
+      where: { landlord_id: landlordId },
+      include: { permissions: true },
+    });
+  }
 }

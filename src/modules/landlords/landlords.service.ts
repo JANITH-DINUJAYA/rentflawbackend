@@ -21,4 +21,10 @@ export class LandlordsService {
       data: dto,
     });
   }
+
+  async findAll() {
+    return this.prisma.landlord.findMany({
+      include: { user: true },
+    });
+  }
 }

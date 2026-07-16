@@ -50,4 +50,39 @@ export class TenantsService {
       },
     });
   }
+
+  async findAllForAdmin() {
+    return this.prisma.user.findMany({
+      where: { global_role: GlobalRole.TENANT },
+      include: {
+        rental_agreements: true,
+      },
+    });
+  }
+
+  async findAllForLandlord(landlordId: string) {
+    return this.prisma.user.findMany({
+      where: {
+        global_role: GlobalRole.TENANT,
+        rental_agreements: {
+          some: {
+            landlord_id: landlordId,
+            status: 'ACTIVE',
+          },
+        },
+      },
+      include: {
+        rental_agreements: {
+          where: {
+            landlord_id: landlordId,
+            status: 'ACTIVE',
+          },
+          include: {
+            property: true,
+            room: true,
+          },
+        },
+      },
+    });
+  }
 }
