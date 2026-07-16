@@ -9,28 +9,38 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // ─── Security ──────────────────────────────────
-  app.use(helmet());
-  app.use(cookieParser());
-
-  // ─── CORS ─────────────────────────────────────
+  // ─── CORS (must be BEFORE helmet) ────────────
   const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'http://localhost:3000',
+    'http://localhost:3001',
     'https://rentflaw.vercel.app',
-  ];
+    process.env.FRONTEND_URL,
+  ].filter(Boolean) as string[];
+
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, Swagger)
+      // Allow requests with no origin (curl, Swagger, mobile apps)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS: Origin ${origin} not allowed`));
+        // Don't throw — just deny with false so server stays alive
+        callback(null, false);
       }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
+
+  // ─── Security (after CORS) ─────────────────────
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
+  app.use(cookieParser());
+
 
   // ─── Global Prefix ────────────────────────────
   app.setGlobalPrefix('api');
