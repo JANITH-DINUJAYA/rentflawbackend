@@ -11,6 +11,7 @@ export interface AddStaffDto {
   first_name: string;
   last_name: string;
   phone: string;
+  password?: string; // If provided, sets the staff login password; otherwise defaults to StaffSecure123!
 }
 
 @Injectable()
@@ -45,7 +46,8 @@ export class StaffService {
     });
 
     if (!user) {
-      const defaultPasswordHash = await bcrypt.hash('StaffSecure123!', 12);
+      const passwordToHash = dto.password && dto.password.length >= 8 ? dto.password : 'StaffSecure123!';
+      const defaultPasswordHash = await bcrypt.hash(passwordToHash, 12);
       user = await this.prisma.user.create({
         data: {
           email: dto.email,
