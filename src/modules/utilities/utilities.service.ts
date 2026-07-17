@@ -35,16 +35,29 @@ export class UtilitiesService {
       amount = units * dto.rate_per_unit;
     }
 
-    return this.prisma.utilityBill.create({
-      data: {
-        landlord_id: landlordId,
-        invoice_id: dto.invoice_id,
-        type: dto.type,
-        meter_reading_previous: dto.meter_reading_previous ?? null,
-        meter_reading_current: dto.meter_reading_current ?? null,
-        rate_per_unit: dto.rate_per_unit ?? null,
-        amount,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const bill = await tx.utilityBill.create({
+        data: {
+          landlord_id: landlordId,
+          invoice_id: dto.invoice_id,
+          type: dto.type,
+          meter_reading_previous: dto.meter_reading_previous ?? null,
+          meter_reading_current: dto.meter_reading_current ?? null,
+          rate_per_unit: dto.rate_per_unit ?? null,
+          amount,
+        },
+      });
+
+      // Update associated invoice amount and total_due (amount - discount + late_fee)
+      await tx.invoice.update({
+        where: { id: dto.invoice_id },
+        data: {
+          amount: amount,
+          total_due: amount - Number(invoice.discount) + Number(invoice.late_fee_applied),
+        },
+      });
+
+      return bill;
     });
   }
 

@@ -90,6 +90,21 @@ export class AgreementsController {
     return this.agreementsService.findAll(landlordId, status);
   }
 
+  @ApiOperation({ summary: 'List all deposit refunds for this landlord' })
+  @Get('refunds/list')
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  findAllRefunds(@CurrentUser() user: any) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.agreementsService.findAllRefunds(landlordId);
+  }
+
+  @ApiOperation({ summary: 'Mark a deposit refund as paid — Landlord only' })
+  @Patch('refunds/:id/pay')
+  @Roles(GlobalRole.LANDLORD)
+  markRefundPaid(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.agreementsService.markRefundPaid(user.landlord_profile.id, id);
+  }
+
   @ApiOperation({ summary: 'Get active/past tenant agreement history — Tenant only' })
   @Get('history')
   @Roles(GlobalRole.TENANT)
@@ -118,21 +133,6 @@ export class AgreementsController {
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.agreementsService.findOne(landlordId, id);
-  }
-
-  @ApiOperation({ summary: 'List all deposit refunds for this landlord' })
-  @Get('refunds/list')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
-  findAllRefunds(@CurrentUser() user: any) {
-    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
-    return this.agreementsService.findAllRefunds(landlordId);
-  }
-
-  @ApiOperation({ summary: 'Mark a deposit refund as paid — Landlord only' })
-  @Patch('refunds/:id/pay')
-  @Roles(GlobalRole.LANDLORD)
-  markRefundPaid(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.agreementsService.markRefundPaid(user.landlord_profile.id, id);
   }
 }
 

@@ -348,32 +348,32 @@ export class PaymentsService {
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (invoice.status === 'PAID') return { message: 'Invoice already paid' };
 
-    const landlordId = invoice.landlord_id;
     const tenantId = invoice.agreement.tenant_id;
 
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.paymentSubmission.findFirst({
-        where: { invoice_id: invoiceId, status: 'APPROVED' },
-      });
-
-      if (!existing) {
-        await tx.paymentSubmission.create({
-          data: {
-            invoice_id: invoiceId,
-            tenant_id: tenantId,
-            amount_paid: amountPaid,
-            payment_date: new Date(),
-            status: PaymentSubmissionStatus.APPROVED,
-            is_locked: true,
-            receipt_url: 'https://sandbox.payhere.lk',
-            notes,
-          },
-        });
-      }
-
-      await this.invoicesService.processFifoPayment(tenantId, landlordId, amountPaid);
-
-      return { status: 'PAID', invoice_id: invoiceId };
+    const existing = await this.prisma.paymentSubmission.findFirst({
+      where: { 
+        invoice_id: invoiceId,
+        status: { in: [PaymentSubmissionStatus.PENDING_REVIEW, PaymentSubmissionStatus.APPROVED] }
+      },
     });
+
+    if (existing) {
+      throw new BadRequestException('A payment submission already exists for this invoice.');
+    }
+
+    const submission = await this.prisma.paymentSubmission.create({
+      data: {
+        invoice_id: invoiceId,
+        tenant_id: tenantId,
+        amount_paid: amountPaid,
+        payment_date: new Date(),
+        status: PaymentSubmissionStatus.PENDING_REVIEW,
+        is_locked: false,
+        receipt_url: 'https://sandbox.payhere.lk',
+        notes,
+      },
+    });
+
+    return { status: 'PENDING_REVIEW', submission_id: submission.id };
   }
 }
