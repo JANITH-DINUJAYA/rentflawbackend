@@ -197,13 +197,30 @@ export class AgreementsService {
     return updated;
   }
 
-  // ─── REQUEST TERMINATION (TENANT) ────────────
+  // ─── REQUEST TERMINATION (TENANT) ───────────────────────
   async requestTermination(tenantId: string, agreementId: string) {
     const agreement = await this.prisma.rentalAgreement.findFirst({
       where: { id: agreementId, tenant_id: tenantId, status: AgreementStatus.ACTIVE },
       include: { room: true, tenant: true },
     });
     if (!agreement) throw new NotFoundException('Active rental agreement not found');
+
+    // Block if tenant has unpaid (PENDING or OVERDUE) invoices on this agreement
+    const unpaidInvoices = await this.prisma.invoice.findMany({
+      where: {
+        agreement_id: agreementId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+      },
+      select: { id: true, total_due: true, due_date: true, status: true },
+      orderBy: { due_date: 'asc' },
+    });
+
+    if (unpaidInvoices.length > 0) {
+      const totalOwed = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total_due), 0);
+      throw new BadRequestException(
+        `You have ${unpaidInvoices.length} unpaid invoice(s) totalling $${totalOwed.toFixed(2)}. Please settle all outstanding dues before requesting to leave.`,
+      );
+    }
 
     const updated = await this.prisma.rentalAgreement.update({
       where: { id: agreementId },
@@ -224,6 +241,65 @@ export class AgreementsService {
     }
 
     return updated;
+  }
+
+  // ─── CALCULATE TERMINATION COST (TENANT PREVIEW) ──────────
+  async calculateTerminationCost(tenantId: string, agreementId: string) {
+    const agreement = await this.prisma.rentalAgreement.findFirst({
+      where: { id: agreementId, tenant_id: tenantId, status: AgreementStatus.ACTIVE },
+      select: {
+        id: true,
+        rent_amount: true,
+        leaving_option: true,
+        leaving_rule: true,
+        collection_day: true,
+      },
+    });
+    if (!agreement) throw new NotFoundException('Active rental agreement not found');
+
+    // Find all unpaid invoices
+    const unpaidInvoices = await this.prisma.invoice.findMany({
+      where: {
+        agreement_id: agreementId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+      },
+      select: { id: true, total_due: true, due_date: true, status: true },
+      orderBy: { due_date: 'asc' },
+    });
+
+    const totalOutstanding = unpaidInvoices.reduce((s, i) => s + Number(i.total_due), 0);
+
+    // Calculate prorated exit cost for today
+    const today = new Date();
+    const activeRule =
+      agreement.leaving_option === LeavingOption.DECIDE_IN_AGREEMENT
+        ? agreement.leaving_rule!
+        : agreement.leaving_option;
+
+    let finalInvoiceAmount: number;
+    let daysToPayFor: number;
+
+    if (activeRule === LeavingOption.PAY_FULL_MONTH) {
+      finalInvoiceAmount = Number(agreement.rent_amount);
+      daysToPayFor = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    } else {
+      // PAY_STAY_DATES: prorate for days stayed in this month
+      const exitDay = today.getDate();
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      daysToPayFor = exitDay;
+      finalInvoiceAmount = parseFloat(
+        ((Number(agreement.rent_amount) / daysInMonth) * exitDay).toFixed(2),
+      );
+    }
+
+    return {
+      leaving_option: activeRule,
+      final_invoice_amount: finalInvoiceAmount,
+      days_to_pay_for: daysToPayFor,
+      unpaid_invoices: unpaidInvoices,
+      total_outstanding: totalOutstanding,
+      can_request_leave: unpaidInvoices.length === 0,
+    };
   }
 
   // ─── TERMINATE AGREEMENT ──────────────────────

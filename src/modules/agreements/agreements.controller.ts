@@ -102,6 +102,13 @@ export class AgreementsController {
     return this.agreementsService.requestTermination(user.id, id);
   }
 
+  @ApiOperation({ summary: 'Preview termination cost before requesting to leave — Tenant only' })
+  @Get(':id/termination-cost')
+  @Roles(GlobalRole.TENANT)
+  calculateTerminationCost(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.agreementsService.calculateTerminationCost(user.id, id);
+  }
+
   @ApiOperation({ summary: 'Get single agreement details' })
   @Get(':id')
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
