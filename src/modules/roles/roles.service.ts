@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -63,7 +63,7 @@ export class RolesService {
       where: { role_id: roleId },
     });
     if (staffCount > 0) {
-      throw new Error('Cannot delete role: Assigned to active staff');
+      throw new BadRequestException('Cannot delete role: Assigned to active staff');
     }
 
     return this.prisma.customRole.delete({
