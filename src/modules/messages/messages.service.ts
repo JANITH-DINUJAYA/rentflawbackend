@@ -105,11 +105,6 @@ export class MessagesService {
   }
 
   async getInboxContacts(userId: string, role: GlobalRole, landlordId?: string) {
-    // Helper to return candidates they can chat with:
-    // - Tenant can chat with Landlord and Landlord Staff, and System Support
-    // - Landlord can chat with Tenants and System Support
-    // - SaaS Admin can chat with everyone
-
     if (role === GlobalRole.TENANT) {
       // Find active agreements for this tenant to get landlord details
       const agreements = await this.prisma.rentalAgreement.findMany({
@@ -150,13 +145,16 @@ export class MessagesService {
     }
 
     if (role === GlobalRole.LANDLORD || role === GlobalRole.STAFF) {
-      // Find active tenants for this landlord
+      // Guard: system admin staff have no landlordId — return empty list
+      if (!landlordId) return [];
+
+      // Find tenants for this landlord (draft/active agreements)
       const agreements = await this.prisma.rentalAgreement.findMany({
         where: {
           landlord_id: landlordId,
-          status: 'ACTIVE',
+          status: { in: ['ACTIVE', 'DRAFT'] as const },
         },
-        include: {
+        select: {
           tenant: { select: { id: true, first_name: true, last_name: true, email: true, global_role: true } },
         },
       });
