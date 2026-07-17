@@ -19,16 +19,22 @@ export class RoomsService {
     });
     if (!floor) throw new ForbiddenException('Floor not found or access denied');
 
-    return this.prisma.room.create({
-      data: {
-        floor_id: dto.floor_id,
-        room_number: dto.room_number,
-        occupancy_type: dto.occupancy_type,
-        capacity: dto.capacity ?? 1,
-        base_rent: dto.base_rent,
-        is_archived: false,
-      },
-    });
+    try {
+      return await this.prisma.room.create({
+        data: {
+          floor_id: dto.floor_id,
+          room_number: dto.room_number,
+          occupancy_type: dto.occupancy_type,
+          capacity: dto.capacity ?? 1,
+          base_rent: dto.base_rent,
+          is_archived: false,
+        },
+      });
+    } catch (err: any) {
+      throw new BadRequestException(
+        `Failed to add room: ${err.message || "database conflict"}`,
+      );
+    }
   }
 
   async findAll(landlordId: string) {

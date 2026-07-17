@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -49,6 +49,17 @@ export class FloorsService {
 
   async archive(id: string, landlordId: string) {
     await this.findOne(id, landlordId);
+
+    const activeAgreements = await this.prisma.rentalAgreement.count({
+      where: {
+        room: { floor_id: id },
+        status: 'ACTIVE',
+      },
+    });
+    if (activeAgreements > 0) {
+      throw new BadRequestException('Cannot archive floor: Active agreements exist in rooms on this floor.');
+    }
+
     return this.prisma.floor.update({
       where: { id },
       data: { is_archived: true },
