@@ -17,7 +17,6 @@ import { GlobalRole } from '@prisma/client';
 
 @ApiTags('Subscriptions')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('subscriptions')
 export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
@@ -29,8 +28,9 @@ export class SubscriptionsController {
   }
 
   @ApiOperation({ summary: 'Create a new subscription package — Admin only' })
-  @Post('packages')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.SAAS_ADMIN)
+  @Post('packages')
   createPackage(
     @Body() dto: { name: string; price: number; max_properties: number; max_tenants: number; max_staff: number },
   ) {
@@ -38,16 +38,18 @@ export class SubscriptionsController {
   }
 
   @ApiOperation({ summary: 'Get current landlord subscription details' })
-  @Get('my-subscription')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  @Get('my-subscription')
   getMySubscription(@CurrentUser() user: any) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.subscriptionsService.getLandlordSubscription(landlordId);
   }
 
   @ApiOperation({ summary: 'Upgrade / Subscribe to a package — Landlord only' })
-  @Post('upgrade')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.LANDLORD)
+  @Post('upgrade')
   upgradeSubscription(
     @CurrentUser() user: any,
     @Body() dto: { packageId: string },
@@ -57,16 +59,18 @@ export class SubscriptionsController {
   }
 
   @ApiOperation({ summary: 'Cancel current subscription — Landlord only' })
-  @Post('cancel')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.LANDLORD)
+  @Post('cancel')
   cancelSubscription(@CurrentUser() user: any) {
     const landlordId = user.landlord_profile.id;
     return this.subscriptionsService.cancelSubscription(landlordId);
   }
 
   @ApiOperation({ summary: 'Delete a subscription package — Admin only (blocked if any active subscriptions exist on it)' })
-  @Delete('packages/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.SAAS_ADMIN)
+  @Delete('packages/:id')
   deletePackage(@Param('id') id: string) {
     return this.subscriptionsService.deletePackage(id);
   }
