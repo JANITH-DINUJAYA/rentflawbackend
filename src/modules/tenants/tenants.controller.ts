@@ -84,4 +84,19 @@ export class TenantsController {
   delete(@Param('id') id: string) {
     return this.tenantsService.delete(id);
   }
+
+  @ApiOperation({ summary: 'List tenants with positive credit balance — Landlord only' })
+  @Get('with-credit')
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
+  getTenantsWithCredit(@CurrentUser() user: any) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.tenantsService.findTenantsWithCredit(landlordId);
+  }
+
+  @ApiOperation({ summary: 'Process credit payout to tenant — Landlord only' })
+  @Post(':id/payout-credit')
+  @Roles(GlobalRole.LANDLORD)
+  payoutCredit(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.tenantsService.payoutCredit(user.landlord_profile.id, id);
+  }
 }

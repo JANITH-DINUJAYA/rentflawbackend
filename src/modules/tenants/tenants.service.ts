@@ -176,4 +176,55 @@ export class TenantsService {
     }
     throw new BadRequestException('Failed to generate unique tenant code');
   }
+
+  // ─── TENANTS WITH CREDIT BALANCE (Landlord) ──
+  // Returns active tenants under this landlord who have overpaid credit > 0
+  async findTenantsWithCredit(landlordId: string) {
+    return this.prisma.user.findMany({
+      where: {
+        global_role: GlobalRole.TENANT,
+        credit_amount: { gt: 0 },
+        rental_agreements: {
+          some: { landlord_id: landlordId, status: 'ACTIVE' },
+        },
+      },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        phone: true,
+        tenant_code: true,
+        credit_amount: true,
+      },
+    });
+  }
+
+  // ─── PAYOUT CREDIT TO TENANT ──────────────────
+  // Resets tenant credit_amount to 0 — used when landlord physically pays
+  // the overpaid credit back to the tenant.
+  async payoutCredit(landlordId: string, tenantId: string) {
+    // Verify tenant is under this landlord
+    const tenant = await this.prisma.user.findFirst({
+      where: {
+        id: tenantId,
+        global_role: GlobalRole.TENANT,
+        rental_agreements: {
+          some: { landlord_id: landlordId },
+        },
+        credit_amount: { gt: 0 },
+      },
+      select: { id: true, first_name: true, last_name: true, credit_amount: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found or has no credit balance');
+
+    const paidAmount = Number(tenant.credit_amount);
+
+    await this.prisma.user.update({
+      where: { id: tenantId },
+      data: { credit_amount: 0 },
+    });
+
+    return { message: 'Credit payout processed', tenant_id: tenantId, amount_paid: paidAmount };
+  }
 }

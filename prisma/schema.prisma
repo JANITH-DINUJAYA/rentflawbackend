@@ -483,6 +483,7 @@ model DepositRefund {
   // Itemized breakdown of deductions (damages, unpaid rent, etc.)
   reason       String?  @db.Text
   processed_at DateTime
+  is_paid      Boolean  @default(false)
 
   created_at DateTime @default(now())
 

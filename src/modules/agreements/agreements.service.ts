@@ -262,6 +262,7 @@ export class AgreementsService {
         leaving_option: true,
         leaving_rule: true,
         collection_day: true,
+        start_date: true,
       },
     });
     if (!agreement) throw new NotFoundException('Rental agreement not found');
@@ -280,6 +281,10 @@ export class AgreementsService {
 
     // Calculate prorated exit cost for today
     const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startDate = new Date(agreement.start_date);
+    const startMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+
     const activeRule =
       agreement.leaving_option === LeavingOption.DECIDE_IN_AGREEMENT
         ? agreement.leaving_rule!
@@ -287,17 +292,28 @@ export class AgreementsService {
 
     let finalInvoiceAmount: number;
     let daysToPayFor: number;
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
 
     if (activeRule === LeavingOption.PAY_FULL_MONTH) {
       finalInvoiceAmount = Number(agreement.rent_amount);
-      daysToPayFor = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      daysToPayFor = daysInMonth;
     } else {
-      // PAY_STAY_DATES: prorate for days stayed in this month
-      const exitDay = today.getDate();
-      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      daysToPayFor = exitDay;
+      // PAY_STAY_DATES: prorate for actual days stayed in the current month
+      if (startMidnight > todayMidnight) {
+        // Agreement hasn't started yet — no days to pay for
+        daysToPayFor = 0;
+      } else if (
+        startDate.getFullYear() === today.getFullYear() &&
+        startDate.getMonth() === today.getMonth()
+      ) {
+        // Started this month — count from start day to today inclusive
+        daysToPayFor = today.getDate() - startDate.getDate() + 1;
+      } else {
+        // Started in a previous month — count from 1st of month to today
+        daysToPayFor = today.getDate();
+      }
       finalInvoiceAmount = parseFloat(
-        ((Number(agreement.rent_amount) / daysInMonth) * exitDay).toFixed(2),
+        ((Number(agreement.rent_amount) / daysInMonth) * daysToPayFor).toFixed(2),
       );
     }
 
@@ -512,6 +528,49 @@ export class AgreementsService {
           take: 1,
         },
       },
+    });
+  }
+
+  // ─── LIST DEPOSIT REFUNDS (Landlord) ──────────
+  // Returns all deposit refund records for agreements owned by this landlord,
+  // including tenant info and refund payment status.
+  async findAllRefunds(landlordId: string) {
+    return this.prisma.depositRefund.findMany({
+      where: {
+        agreement: { landlord_id: landlordId },
+      },
+      orderBy: { created_at: 'desc' },
+      include: {
+        agreement: {
+          select: {
+            id: true,
+            end_date: true,
+            rent_amount: true,
+            security_deposit: true,
+            tenant: { select: { id: true, first_name: true, last_name: true, email: true, phone: true, tenant_code: true } },
+            property: { select: { name: true } },
+            room: { select: { room_number: true } },
+          },
+        },
+      },
+    });
+  }
+
+  // ─── MARK DEPOSIT REFUND AS PAID ──────────────
+  // Landlord confirms they have physically paid the refund to the tenant.
+  async markRefundPaid(landlordId: string, refundId: string) {
+    const refund = await this.prisma.depositRefund.findFirst({
+      where: {
+        id: refundId,
+        agreement: { landlord_id: landlordId },
+      },
+    });
+    if (!refund) throw new NotFoundException('Deposit refund not found');
+    if (refund.is_paid) throw new BadRequestException('Refund is already marked as paid');
+
+    return this.prisma.depositRefund.update({
+      where: { id: refundId },
+      data: { is_paid: true },
     });
   }
 }
