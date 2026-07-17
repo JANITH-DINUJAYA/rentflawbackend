@@ -96,6 +96,28 @@ export class AuthService {
         last_name: true,
         global_role: true,
         is_active: true,
+        tenant_code: true,
+        credit_amount: true,
+        landlord_profile: {
+          select: {
+            id: true,
+            company_name: true,
+            subscription_status: true,
+          },
+        },
+        staff_profile: {
+          select: {
+            id: true,
+            landlord_id: true,
+            role: {
+              select: {
+                id: true,
+                name: true,
+                permissions: { select: { action: true } },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -115,16 +137,13 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user.id, user.email, user.global_role);
 
+    // Destructure out the password_hash before returning
+    const { password_hash: _pw, ...userProfile } = user;
+
     return {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-      user: {
-        id: user.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        global_role: user.global_role,
-      },
+      user: userProfile,
     };
   }
 

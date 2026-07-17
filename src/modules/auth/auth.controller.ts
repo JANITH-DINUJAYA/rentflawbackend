@@ -18,8 +18,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,         // Prevent XSS access to refresh token
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: true,           // Must be true when sameSite is 'none'
+  sameSite: 'none' as const, // Allow cross-origin (Vercel frontend → Railway backend)
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   path: '/api/auth',     // Scoped to auth endpoints only
 };
