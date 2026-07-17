@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentSubmissionStatus } from '@prisma/client';
 import { InvoicesService } from '../invoices/invoices.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class PaymentsService {
@@ -237,6 +238,142 @@ export class PaymentsService {
         },
         reviewer: { select: { first_name: true, last_name: true } },
       },
+    });
+  }
+  // ─── GET PAYHERE PARAMS ─────────────────────────
+  async getPayHereParams(tenantId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: {
+        id: invoiceId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+        agreement: { tenant_id: tenantId },
+      },
+      include: {
+        agreement: {
+          include: {
+            tenant: true,
+            property: true,
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found or eligible for payment');
+    }
+
+    const merchantId = process.env.PAYHERE_MERCHANT_ID || '1226786';
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET || '8MTEyMjgxMTI3MjMzODMwNDAzNTMxMTk4OTExMzYyMzMxMzgx';
+    const currency = 'LKR';
+
+    const amountFormatted = Number(invoice.total_due).toFixed(2);
+    const secretHash = crypto.createHash('md5').update(merchantSecret).digest('hex').toUpperCase();
+    const rawString = merchantId + invoiceId + amountFormatted + currency + secretHash;
+    const hash = crypto.createHash('md5').update(rawString).digest('hex').toUpperCase();
+
+    const tenant = invoice.agreement.tenant;
+    const property = invoice.agreement.property;
+
+    return {
+      sandbox: true,
+      merchant_id: merchantId,
+      return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tenant/invoices?status=success`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tenant/invoices?status=cancelled`,
+      notify_url: `${process.env.BACKEND_URL || 'http://localhost:4000'}/payments/payhere/notify`,
+      order_id: invoiceId,
+      items: `${invoice.type} Invoice - ${property.name}`,
+      amount: amountFormatted,
+      currency,
+      hash,
+      first_name: tenant.first_name,
+      last_name: tenant.last_name,
+      email: tenant.email,
+      phone: tenant.phone || '0771234567',
+      address: property.address,
+      city: 'Colombo',
+      country: 'Sri Lanka',
+    };
+  }
+
+  // ─── PROCESS WEBHOOK CALLBACK ────────────────────
+  async processPayHereWebhook(payload: any) {
+    const merchantId = payload.merchant_id;
+    const orderId = payload.order_id;
+    const payhereAmount = payload.payhere_amount;
+    const payhereCurrency = payload.payhere_currency;
+    const statusCode = payload.status_code;
+    const md5sig = payload.md5sig;
+    const paymentId = payload.payment_id;
+
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET || '8MTEyMjgxMTI3MjMzODMwNDAzNTMxMTk4OTExMzYyMzMxMzgx';
+    const secretHash = crypto.createHash('md5').update(merchantSecret).digest('hex').toUpperCase();
+    const rawString = merchantId + orderId + payhereAmount + payhereCurrency + statusCode + secretHash;
+    const localMd5Sig = crypto.createHash('md5').update(rawString).digest('hex').toUpperCase();
+
+    if (localMd5Sig !== md5sig) {
+      throw new BadRequestException('Invalid signature verification');
+    }
+
+    if (statusCode === '2') {
+      await this.confirmDirectPayment(orderId, Number(payhereAmount), `PayHere Sandbox ID: ${paymentId}`);
+    }
+
+    return { status: 'success' };
+  }
+
+  // ─── LOCAL BYPASS PAYMENT ────────────────────────
+  async processLocalBypassPayment(tenantId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: {
+        id: invoiceId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+        agreement: { tenant_id: tenantId },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found or eligible for payment');
+    }
+
+    return this.confirmDirectPayment(invoiceId, Number(invoice.total_due), 'PayHere Sandbox Local Bypass Settle');
+  }
+
+  // ─── CONFIRM DIRECT PAYMENT ──────────────────────
+  async confirmDirectPayment(invoiceId: string, amountPaid: number, notes: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { agreement: true },
+    });
+
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.status === 'PAID') return { message: 'Invoice already paid' };
+
+    const landlordId = invoice.landlord_id;
+    const tenantId = invoice.agreement.tenant_id;
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.paymentSubmission.findFirst({
+        where: { invoice_id: invoiceId, status: 'APPROVED' },
+      });
+
+      if (!existing) {
+        await tx.paymentSubmission.create({
+          data: {
+            invoice_id: invoiceId,
+            tenant_id: tenantId,
+            amount_paid: amountPaid,
+            payment_date: new Date(),
+            status: PaymentSubmissionStatus.APPROVED,
+            is_locked: true,
+            receipt_url: 'https://sandbox.payhere.lk',
+            notes,
+          },
+        });
+      }
+
+      await this.invoicesService.processFifoPayment(tenantId, landlordId, amountPaid);
+
+      return { status: 'PAID', invoice_id: invoiceId };
     });
   }
 }
