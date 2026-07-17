@@ -243,19 +243,28 @@ export class AgreementsService {
     return updated;
   }
 
-  // ─── CALCULATE TERMINATION COST (TENANT PREVIEW) ──────────
-  async calculateTerminationCost(tenantId: string, agreementId: string) {
+  // ─── CALCULATE TERMINATION COST (TENANT & LANDLORD PREVIEW) ──
+  async calculateTerminationCost(actorId: string, isTenant: boolean, agreementId: string) {
+    const where: any = { id: agreementId };
+    if (isTenant) {
+      where.tenant_id = actorId;
+      where.status = AgreementStatus.ACTIVE;
+    } else {
+      where.landlord_id = actorId;
+    }
+
     const agreement = await this.prisma.rentalAgreement.findFirst({
-      where: { id: agreementId, tenant_id: tenantId, status: AgreementStatus.ACTIVE },
+      where,
       select: {
         id: true,
         rent_amount: true,
+        security_deposit: true,
         leaving_option: true,
         leaving_rule: true,
         collection_day: true,
       },
     });
-    if (!agreement) throw new NotFoundException('Active rental agreement not found');
+    if (!agreement) throw new NotFoundException('Rental agreement not found');
 
     // Find all unpaid invoices
     const unpaidInvoices = await this.prisma.invoice.findMany({
@@ -296,6 +305,7 @@ export class AgreementsService {
       leaving_option: activeRule,
       final_invoice_amount: finalInvoiceAmount,
       days_to_pay_for: daysToPayFor,
+      security_deposit: Number(agreement.security_deposit),
       unpaid_invoices: unpaidInvoices,
       total_outstanding: totalOutstanding,
       can_request_leave: unpaidInvoices.length === 0,
@@ -303,8 +313,15 @@ export class AgreementsService {
   }
 
   // ─── TERMINATE AGREEMENT ──────────────────────
-  // Calculates the final invoice based on leaving_option set at creation time.
-  async terminate(landlordId: string | null, agreementId: string, exitDate: Date) {
+  // Calculates the final invoice, processes security deposit offset if requested,
+  // marks unpaid invoices as PAID, and logs the DepositRefund.
+  async terminate(
+    landlordId: string | null,
+    agreementId: string,
+    exitDate: Date,
+    deductFromDeposit?: boolean,
+    deductionReason?: string,
+  ) {
     const where: any = {
       id: agreementId,
       status: { in: [AgreementStatus.ACTIVE, AgreementStatus.TERMINATION_REQUESTED] },
@@ -319,6 +336,7 @@ export class AgreementsService {
         id: true,
         tenant_id: true,
         rent_amount: true,
+        security_deposit: true,
         leaving_option: true,
         leaving_rule: true,
         collection_day: true,
@@ -349,23 +367,67 @@ export class AgreementsService {
       );
     }
 
-    // Terminate agreement
-    await this.prisma.rentalAgreement.update({
-      where: { id: agreementId },
-      data: { status: AgreementStatus.TERMINATED, end_date: exitDate },
+    // Load unpaid invoices to resolve if offsetting
+    const unpaidInvoices = await this.prisma.invoice.findMany({
+      where: {
+        agreement_id: agreementId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+      },
+    });
+
+    const totalOutstanding = unpaidInvoices.reduce((s, i) => s + Number(i.total_due), 0);
+    const totalDeductions = totalOutstanding + finalInvoiceAmount;
+    const securityDeposit = Number(agreement.security_deposit);
+
+    let refundAmount = 0;
+    if (deductFromDeposit) {
+      refundAmount = Math.max(0, securityDeposit - totalDeductions);
+    }
+
+    // Perform database updates inside a safe prisma transaction
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Terminate agreement
+      await tx.rentalAgreement.update({
+        where: { id: agreementId },
+        data: { status: AgreementStatus.TERMINATED, end_date: exitDate },
+      });
+
+      // 2. Resolve outstanding invoices if offsetting
+      if (deductFromDeposit) {
+        await tx.invoice.updateMany({
+          where: {
+            agreement_id: agreementId,
+            status: { in: ['PENDING', 'OVERDUE'] },
+          },
+          data: { status: 'PAID' },
+        });
+
+        // Create deposit refund record
+        await tx.depositRefund.create({
+          data: {
+            agreement_id: agreementId,
+            refund_amount: refundAmount,
+            deductions: Math.min(securityDeposit, totalDeductions),
+            reason: deductionReason || `Offset outstanding dues ($${totalOutstanding.toFixed(2)}) & final month prorated rent ($${finalInvoiceAmount.toFixed(2)}).`,
+            processed_at: new Date(),
+          },
+        });
+      }
     });
 
     // Notify tenant
     await this.notifications.createNotification(
       agreement.tenant_id,
       'Lease Terminated',
-      `Your lease agreement for Room ${agreement.room.room_number} has been officially terminated. Final prorated invoice has been calculated.`,
+      `Your lease agreement for Room ${agreement.room.room_number} has been officially terminated. ${deductFromDeposit ? `Dues offset from deposit. Refund amount: $${refundAmount.toFixed(2)}.` : `Final prorated invoice of $${finalInvoiceAmount.toFixed(2)} generated.`}`,
     );
 
     return {
       message: 'Agreement terminated',
       leaving_rule_applied: activeRule,
       final_invoice_amount: finalInvoiceAmount,
+      offset_applied: deductFromDeposit || false,
+      refund_amount: refundAmount,
     };
   }
 

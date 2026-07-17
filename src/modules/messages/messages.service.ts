@@ -93,6 +93,17 @@ export class MessagesService {
     });
   }
 
+  async markSupportReadForSender(senderId: string) {
+    return this.prisma.message.updateMany({
+      where: {
+        sender_id: senderId,
+        to_admin: true,
+        is_read: false,
+      },
+      data: { is_read: true },
+    });
+  }
+
   async getInboxContacts(userId: string, role: GlobalRole, landlordId?: string) {
     // Helper to return candidates they can chat with:
     // - Tenant can chat with Landlord and Landlord Staff, and System Support

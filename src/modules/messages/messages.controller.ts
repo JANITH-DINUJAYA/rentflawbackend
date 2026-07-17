@@ -53,4 +53,10 @@ export class MessagesController {
   markSupportRead() {
     return this.messagesService.markSupportRead();
   }
+
+  @ApiOperation({ summary: 'Mark support ticket from a specific sender as read' })
+  @Patch('read-support/:senderId')
+  markSupportReadForSender(@Param('senderId') senderId: string) {
+    return this.messagesService.markSupportReadForSender(senderId);
+  }
 }

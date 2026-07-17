@@ -67,13 +67,15 @@ export class AgreementsController {
   terminate(
     @CurrentUser() user: any,
     @Param('id') id: string,
-    @Body() dto: { exit_date: Date },
+    @Body() dto: { exit_date: Date; deduct_from_deposit?: boolean; deduction_reason?: string },
   ) {
     const landlordId = user.global_role === GlobalRole.SAAS_ADMIN ? null : user.landlord_profile.id;
     return this.agreementsService.terminate(
       landlordId,
       id,
       new Date(dto.exit_date),
+      dto.deduct_from_deposit,
+      dto.deduction_reason,
     );
   }
 
@@ -102,11 +104,13 @@ export class AgreementsController {
     return this.agreementsService.requestTermination(user.id, id);
   }
 
-  @ApiOperation({ summary: 'Preview termination cost before requesting to leave — Tenant only' })
+  @ApiOperation({ summary: 'Preview termination cost before requesting to leave — Tenant/Landlord' })
   @Get(':id/termination-cost')
-  @Roles(GlobalRole.TENANT)
+  @Roles(GlobalRole.TENANT, GlobalRole.LANDLORD, GlobalRole.STAFF)
   calculateTerminationCost(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.agreementsService.calculateTerminationCost(user.id, id);
+    const isTenant = user.global_role === GlobalRole.TENANT;
+    const actorId = isTenant ? user.id : (user.landlord_profile?.id || user.staff_profile?.landlord_id);
+    return this.agreementsService.calculateTerminationCost(actorId, isTenant, id);
   }
 
   @ApiOperation({ summary: 'Get single agreement details' })
