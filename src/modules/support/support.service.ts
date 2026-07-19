@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 
@@ -7,6 +7,13 @@ export class SupportService {
   constructor(private prisma: PrismaService) {}
 
   async createTicket(tenantId: string, dto: { category: string; description: string; priority: TicketPriority }) {
+    const activeLease = await this.prisma.rentalAgreement.findFirst({
+      where: { tenant_id: tenantId, status: 'ACTIVE' },
+    });
+    if (!activeLease) {
+      throw new ForbiddenException('You must have an active lease agreement to submit support tickets.');
+    }
+
     return this.prisma.supportTicket.create({
       data: {
         tenant_id: tenantId,

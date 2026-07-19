@@ -30,6 +30,14 @@ export class PaymentsService {
       receipt_url: string;
     },
   ) {
+    // Verify tenant has an active agreement
+    const activeLease = await this.prisma.rentalAgreement.findFirst({
+      where: { tenant_id: tenantId, status: 'ACTIVE' },
+    });
+    if (!activeLease) {
+      throw new ForbiddenException('You must have an active lease agreement to submit payments.');
+    }
+
     // Verify invoice belongs to this tenant
     const invoice = await this.prisma.invoice.findFirst({
       where: {
