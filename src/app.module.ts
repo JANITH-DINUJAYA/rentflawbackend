@@ -26,6 +26,7 @@ import { FilesModule } from './modules/files/files.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { JobsModule } from './jobs/jobs.module';
+import { SystemModule } from './modules/system/system.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { JobsModule } from './jobs/jobs.module';
     PrismaModule,
 
     // ─── Feature Modules ─────────────────────────
+    SystemModule,
     AuthModule,
     UsersModule,
     LandlordsModule,

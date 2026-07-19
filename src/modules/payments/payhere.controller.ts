@@ -49,4 +49,24 @@ export class PayhereController {
   ) {
     return this.paymentsService.processLocalBypassPayment(user.id, dto.invoice_id);
   }
+
+  @ApiOperation({ summary: 'Initiate PayHere Checkout for Subscription Plan — Landlord only' })
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(GlobalRole.LANDLORD)
+  @Post('initiate-subscription')
+  initiateSubscriptionCheckout(
+    @CurrentUser() user: any,
+    @Body() dto: { packageId: string },
+  ) {
+    return this.paymentsService.getPayHereSubscriptionParams(user.landlord_profile.id, dto.packageId);
+  }
+
+  @ApiOperation({ summary: 'PayHere subscription payment notify webhook — Public Callback' })
+  @Post('subscription-notify')
+  @HttpCode(HttpStatus.OK)
+  async handleSubscriptionWebhook(@Body() payload: any) {
+    // For subscription payments, just log — activate subscription on payment success
+    return this.paymentsService.processPayHereWebhook(payload);
+  }
 }

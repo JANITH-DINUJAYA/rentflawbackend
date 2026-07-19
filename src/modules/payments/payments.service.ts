@@ -277,9 +277,9 @@ export class PaymentsService {
     return {
       sandbox: true,
       merchant_id: merchantId,
-      return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tenant/invoices?status=success`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tenant/invoices?status=cancelled`,
-      notify_url: `${process.env.BACKEND_URL || 'http://localhost:4000'}/payments/payhere/notify`,
+      return_url: `${process.env.FRONTEND_URL || 'https://rentflaw.vercel.app'}/tenant/invoices?status=success`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://rentflaw.vercel.app'}/tenant/invoices?status=cancelled`,
+      notify_url: `${process.env.BACKEND_URL || 'https://rentflawbackend-production.up.railway.app/api'}/payments/payhere/notify`,
       order_id: invoiceId,
       items: `${invoice.type} Invoice - ${property.name}`,
       amount: amountFormatted,
@@ -290,6 +290,53 @@ export class PaymentsService {
       email: tenant.email,
       phone: tenant.phone || '0771234567',
       address: property.address,
+      city: 'Colombo',
+      country: 'Sri Lanka',
+    };
+  }
+
+  // ─── GET PAYHERE PARAMS FOR SUBSCRIPTION ─────────
+  async getPayHereSubscriptionParams(landlordId: string, packageId: string) {
+    const landlord = await this.prisma.landlord.findFirst({
+      where: { id: landlordId },
+      include: { user: true },
+    });
+
+    if (!landlord) throw new NotFoundException('Landlord profile not found');
+
+    const pkg = await this.prisma.subscriptionPackage.findUnique({
+      where: { id: packageId },
+    });
+
+    if (!pkg) throw new NotFoundException('Subscription package not found');
+    if (Number(pkg.price) === 0) throw new BadRequestException('Free plans do not require payment');
+
+    const merchantId = process.env.PAYHERE_MERCHANT_ID || '1226786';
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET || '8MTEyMjgxMTI3MjMzODMwNDAzNTMxMTk4OTExMzYyMzMxMzgx';
+    const currency = 'LKR';
+    const orderId = `SUB-${landlordId}-${packageId}-${Date.now()}`;
+    const amountFormatted = Number(pkg.price).toFixed(2);
+
+    const secretHash = crypto.createHash('md5').update(merchantSecret).digest('hex').toUpperCase();
+    const rawString = merchantId + orderId + amountFormatted + currency + secretHash;
+    const hash = crypto.createHash('md5').update(rawString).digest('hex').toUpperCase();
+
+    return {
+      sandbox: true,
+      merchant_id: merchantId,
+      return_url: `${process.env.FRONTEND_URL || 'https://rentflaw.vercel.app'}/landlord/subscriptions?status=success`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://rentflaw.vercel.app'}/landlord/subscriptions?status=cancelled`,
+      notify_url: `${process.env.BACKEND_URL || 'https://rentflawbackend-production.up.railway.app/api'}/payments/payhere/subscription-notify`,
+      order_id: orderId,
+      items: `RentFlaw ${pkg.name} Subscription`,
+      amount: amountFormatted,
+      currency,
+      hash,
+      first_name: landlord.user.first_name,
+      last_name: landlord.user.last_name,
+      email: landlord.user.email,
+      phone: landlord.user.phone || '0771234567',
+      address: landlord.company_name || 'RentFlaw Platform',
       city: 'Colombo',
       country: 'Sri Lanka',
     };

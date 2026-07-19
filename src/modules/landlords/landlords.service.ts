@@ -109,7 +109,14 @@ export class LandlordsService {
 
   async findAll() {
     return this.prisma.landlord.findMany({
-      include: { user: true },
+      include: {
+        user: true,
+        subscription: {
+          include: {
+            package: true,
+          },
+        },
+      },
       orderBy: { created_at: 'desc' },
     });
   }
