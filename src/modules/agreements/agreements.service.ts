@@ -395,7 +395,7 @@ export class AgreementsService {
     const totalDeductions = totalOutstanding + finalInvoiceAmount;
     const securityDeposit = Number(agreement.security_deposit);
 
-    let refundAmount = 0;
+    let refundAmount = securityDeposit;
     if (deductFromDeposit) {
       refundAmount = Math.max(0, securityDeposit - totalDeductions);
     }
@@ -417,18 +417,20 @@ export class AgreementsService {
           },
           data: { status: 'PAID' },
         });
-
-        // Create deposit refund record
-        await tx.depositRefund.create({
-          data: {
-            agreement_id: agreementId,
-            refund_amount: refundAmount,
-            deductions: Math.min(securityDeposit, totalDeductions),
-            reason: deductionReason || `Offset outstanding dues ($${totalOutstanding.toFixed(2)}) & final month prorated rent ($${finalInvoiceAmount.toFixed(2)}).`,
-            processed_at: new Date(),
-          },
-        });
       }
+
+      // 3. Always create deposit refund record
+      await tx.depositRefund.create({
+        data: {
+          agreement_id: agreementId,
+          refund_amount: refundAmount,
+          deductions: deductFromDeposit ? Math.min(securityDeposit, totalDeductions) : 0,
+          reason: deductFromDeposit
+            ? (deductionReason || `Offset outstanding dues ($${totalOutstanding.toFixed(2)}) & final month prorated rent ($${finalInvoiceAmount.toFixed(2)}).`)
+            : 'No deposit deductions. Full deposit refund processed.',
+          processed_at: new Date(),
+        },
+      });
     });
 
     // Notify tenant
@@ -564,14 +566,40 @@ export class AgreementsService {
         id: refundId,
         agreement: { landlord_id: landlordId },
       },
+      include: {
+        agreement: {
+          include: {
+            tenant: true,
+            property: true,
+          },
+        },
+      },
     });
     if (!refund) throw new NotFoundException('Deposit refund not found');
     if (refund.is_paid) throw new BadRequestException('Refund is already marked as paid');
 
-    return this.prisma.depositRefund.update({
+    const updated = await this.prisma.depositRefund.update({
       where: { id: refundId },
       data: { is_paid: true },
     });
+
+    const tenant = refund.agreement.tenant;
+    // 1. In-app database notification
+    await this.notifications.createNotification(
+      tenant.id,
+      'Deposit Refund Processed',
+      `Your security deposit refund of $${Number(refund.refund_amount).toFixed(2)} for ${refund.agreement.property.name} has been marked as Paid by the landlord.`,
+    );
+
+    // 2. Email notification
+    await this.notifications.sendDepositRefundPaid(
+      tenant.email,
+      `${tenant.first_name} ${tenant.last_name}`,
+      Number(refund.refund_amount),
+      refund.agreement.property.name,
+    );
+
+    return updated;
   }
 }
 

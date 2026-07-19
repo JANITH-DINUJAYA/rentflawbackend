@@ -145,4 +145,26 @@ export class NotificationsService {
        <p>Timestamp: ${new Date().toISOString()}</p>`,
     );
   }
+
+  async sendDepositRefundPaid(to: string, name: string, amount: number, propertyName: string): Promise<void> {
+    await this.sendGenericEmail(
+      to,
+      'Security Deposit Refund Paid — RentFlaw',
+      `<p>Hello <strong>${name}</strong>,</p>
+       <p>Your landlord has processed and paid your security deposit refund of <strong>$${amount.toFixed(2)}</strong> for <strong>${propertyName}</strong>.</p>
+       <p>Please check your bank account or contact your landlord for payment references.</p>
+       <p>Thank you for using RentFlaw!</p>`,
+    );
+  }
+
+  async sendCreditPayoutPaid(to: string, name: string, amount: number): Promise<void> {
+    await this.sendGenericEmail(
+      to,
+      'Overpaid Credit Refund Paid — RentFlaw',
+      `<p>Hello <strong>${name}</strong>,</p>
+       <p>Your landlord has processed and settled your overpaid credit balance of <strong>$${amount.toFixed(2)}</strong>.</p>
+       <p>Please check your bank account or contact your landlord for payment references.</p>
+       <p>Thank you!</p>`,
+    );
+  }
 }

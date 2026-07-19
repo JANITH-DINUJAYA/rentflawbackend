@@ -3,10 +3,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { GlobalRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async getTenantProfile(tenantId: string) {
     const tenant = await this.prisma.user.findFirst({
@@ -214,7 +218,7 @@ export class TenantsService {
         },
         credit_amount: { gt: 0 },
       },
-      select: { id: true, first_name: true, last_name: true, credit_amount: true },
+      select: { id: true, first_name: true, last_name: true, credit_amount: true, email: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found or has no credit balance');
 
@@ -224,6 +228,20 @@ export class TenantsService {
       where: { id: tenantId },
       data: { credit_amount: 0 },
     });
+
+    // 1. In-app database notification
+    await this.notifications.createNotification(
+      tenantId,
+      'Credit Balance Settle Payout',
+      `Your overpayment credit balance of $${paidAmount.toFixed(2)} has been paid out and settled by the landlord.`,
+    );
+
+    // 2. Email notification
+    await this.notifications.sendCreditPayoutPaid(
+      tenant.email,
+      `${tenant.first_name} ${tenant.last_name}`,
+      paidAmount,
+    );
 
     return { message: 'Credit payout processed', tenant_id: tenantId, amount_paid: paidAmount };
   }
