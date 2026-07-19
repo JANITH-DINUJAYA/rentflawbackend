@@ -24,19 +24,37 @@ export class MaintenanceGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const url = request.url;
 
-    // Allowed endpoints during maintenance:
-    // Auth login/refresh, and system maintenance status/toggles.
+    // 1. Always allow authentication and system maintenance endpoints
     const isAllowedEndpoint =
-      url.includes('/api/auth/login') ||
-      url.includes('/api/auth/refresh') ||
-      url.includes('/api/system/maintenance') ||
-      url.includes('/api/system/logs');
+      url.includes('/auth/login') ||
+      url.includes('/auth/refresh') ||
+      url.includes('/system/maintenance') ||
+      url.includes('/system/logs');
 
     if (isAllowedEndpoint) {
       return true;
     }
 
-    // If logged in as SAAS_ADMIN, allow everything
+    // 2. Extract JWT token to check if user has SAAS_ADMIN role
+    const authHeader = request.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        try {
+          const payload = JSON.parse(
+            Buffer.from(parts[1], 'base64').toString('utf-8'),
+          );
+          if (payload && payload.role === GlobalRole.SAAS_ADMIN) {
+            return true;
+          }
+        } catch (err) {
+          // JSON parsing or base64 decoding failure, fall through
+        }
+      }
+    }
+
+    // Fallback to checking request.user if it was populated earlier
     const user = request.user;
     if (user && user.global_role === GlobalRole.SAAS_ADMIN) {
       return true;
