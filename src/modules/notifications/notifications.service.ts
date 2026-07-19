@@ -59,7 +59,9 @@ export class NotificationsService {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'RentFlaw <noreply@rentflaw.com>',
+          // onboarding@resend.dev works without domain verification (Resend sandbox).
+          // Set EMAIL_FROM in Railway env vars once you verify your domain on resend.com/domains
+          from: process.env.EMAIL_FROM || 'RentFlaw <onboarding@resend.dev>',
           to: [to],
           subject,
           html,
