@@ -85,6 +85,13 @@ export class TenantsController {
     return this.tenantsService.delete(id);
   }
 
+  @ApiOperation({ summary: 'Bulk delete/deactivate tenants — Admin only' })
+  @Post('bulk-delete')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  bulkDelete(@Body() dto: { ids: string[] }) {
+    return this.tenantsService.bulkDelete(dto.ids);
+  }
+
   @ApiOperation({ summary: 'List tenants with positive credit balance — Landlord only' })
   @Get('with-credit')
   @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)

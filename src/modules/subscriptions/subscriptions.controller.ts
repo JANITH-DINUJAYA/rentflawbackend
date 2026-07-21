@@ -16,6 +16,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GlobalRole } from '@prisma/client';
+import { UpdatePackageDto } from './dto/update-package.dto';
 
 @ApiTags('Subscriptions')
 @ApiBearerAuth()
@@ -169,6 +170,17 @@ export class SubscriptionsController {
   @Patch('bank-payments/:id/reject')
   rejectBankPayment(@Param('id') id: string, @Body() dto: { notes?: string }) {
     return this.subscriptionsService.rejectBankPayment(id, dto.notes);
+  }
+
+  @ApiOperation({ summary: 'Update a subscription package — Admin only' })
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(GlobalRole.SAAS_ADMIN)
+  @Patch('packages/:id')
+  updatePackage(
+    @Param('id') id: string,
+    @Body() dto: UpdatePackageDto,
+  ) {
+    return this.subscriptionsService.updatePackage(id, dto);
   }
 }
 

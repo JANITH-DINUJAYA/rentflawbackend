@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma.service';
@@ -12,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { GlobalRole } from '@prisma/client';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -20,6 +22,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private notifications: NotificationsService,
   ) {}
 
   // ─────────────────────────────────────────────
@@ -237,5 +240,44 @@ export class AuthService {
       if (!exists) return code;
     }
     throw new BadRequestException('Failed to generate unique tenant code');
+  }
+
+  // ─────────────────────────────────────────────
+  // FORGOT PASSWORD
+  // ─────────────────────────────────────────────
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, first_name: true, last_name: true, email: true, is_active: true },
+    });
+
+    // Always return the same message to prevent email enumeration attacks
+    const safeMessage = {
+      message: 'If that email is registered, a temporary password has been sent.',
+    };
+
+    if (!user || !user.is_active) return safeMessage;
+
+    // Generate a readable 12-char temp password: e.g. Rf!Ab3Cd7Ef9
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let tempPassword = 'Rf!';
+    for (let i = 0; i < 9; i++) {
+      tempPassword += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    const passwordHash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password_hash: passwordHash },
+    });
+
+    // Fire-and-forget email — do not await to keep response fast
+    this.notifications
+      .sendPasswordResetEmail(user.email, `${user.first_name} ${user.last_name}`, tempPassword)
+      .catch(() => { /* swallow email errors */ });
+
+    return safeMessage;
   }
 }

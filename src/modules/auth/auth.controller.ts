@@ -89,4 +89,11 @@ export class AuthController {
   getMe(@CurrentUser() user: any) {
     return this.authService.getMe(user.id);
   }
+
+  @ApiOperation({ summary: 'Request a password reset email — public' })
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: { email: string }) {
+    return this.authService.forgotPassword(dto.email);
+  }
 }

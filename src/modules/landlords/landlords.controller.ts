@@ -96,4 +96,11 @@ export class LandlordsController {
   delete(@Param('id') id: string) {
     return this.landlordsService.delete(id);
   }
+
+  @ApiOperation({ summary: 'Bulk delete/deactivate landlords — Admin only' })
+  @Post('bulk-delete')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  bulkDelete(@Body() dto: { ids: string[] }) {
+    return this.landlordsService.bulkDelete(dto.ids);
+  }
 }

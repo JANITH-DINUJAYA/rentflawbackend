@@ -42,6 +42,7 @@ export class TenantsService {
     return this.prisma.user.findMany({
       where: {
         global_role: GlobalRole.TENANT,
+        is_active: true,
         rental_agreements: {
           some: {
             landlord_id: landlordId,
@@ -64,7 +65,7 @@ export class TenantsService {
 
   async findAllForAdmin() {
     return this.prisma.user.findMany({
-      where: { global_role: GlobalRole.TENANT },
+      where: { global_role: GlobalRole.TENANT, is_active: true },
       include: {
         rental_agreements: {
           include: {
@@ -81,6 +82,7 @@ export class TenantsService {
     return this.prisma.user.findMany({
       where: {
         global_role: GlobalRole.TENANT,
+        is_active: true,
         rental_agreements: {
           some: {
             landlord_id: landlordId,
@@ -168,8 +170,16 @@ export class TenantsService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    return this.prisma.user.delete({
+    return this.prisma.user.update({
       where: { id },
+      data: { is_active: false },
+    });
+  }
+
+  async bulkDelete(ids: string[]) {
+    return this.prisma.user.updateMany({
+      where: { id: { in: ids }, global_role: GlobalRole.TENANT },
+      data: { is_active: false },
     });
   }
 

@@ -111,14 +111,27 @@ export class LandlordsService {
 
   async delete(id: string) {
     const landlord = await this.findOne(id);
-    // Delete the user which will cascade delete the landlord profile
-    return this.prisma.user.delete({
+    return this.prisma.user.update({
       where: { id: landlord.user_id },
+      data: { is_active: false },
+    });
+  }
+
+  async bulkDelete(ids: string[]) {
+    const landlords = await this.prisma.landlord.findMany({
+      where: { id: { in: ids } },
+      select: { user_id: true },
+    });
+    const userIds = landlords.map(l => l.user_id);
+    return this.prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { is_active: false },
     });
   }
 
   async findAll() {
     return this.prisma.landlord.findMany({
+      where: { user: { is_active: true } },
       include: {
         user: true,
         subscription: {

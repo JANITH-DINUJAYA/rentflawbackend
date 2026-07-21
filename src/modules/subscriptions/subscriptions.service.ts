@@ -265,5 +265,27 @@ export class SubscriptionsService {
       data: { status: 'REJECTED', notes },
     });
   }
+
+  async updatePackage(
+    packageId: string,
+    dto: {
+      name?: string;
+      price?: number;
+      max_properties?: number;
+      max_tenants?: number;
+      max_staff?: number;
+      is_active?: boolean;
+    },
+  ) {
+    const pkg = await this.prisma.subscriptionPackage.findUnique({
+      where: { id: packageId },
+    });
+    if (!pkg) throw new NotFoundException('Subscription package not found');
+
+    return this.prisma.subscriptionPackage.update({
+      where: { id: packageId },
+      data: dto,
+    });
+  }
 }
 

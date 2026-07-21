@@ -169,4 +169,27 @@ export class NotificationsService {
        <p>Thank you!</p>`,
     );
   }
+
+  async sendPasswordResetEmail(to: string, name: string, tempPassword: string): Promise<void> {
+    await this.sendGenericEmail(
+      to,
+      'Password Reset — RentFlaw',
+      `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: auto; padding: 40px 20px; background: #f9fafb; border-radius: 12px;">
+        <div style="background: white; border-radius: 10px; padding: 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
+          <h1 style="color: #4f46e5; font-size: 24px; margin-top: 0;">🔑 Password Reset</h1>
+          <p style="color: #374151;">Hello <strong>${name}</strong>,</p>
+          <p style="color: #374151;">We received a password reset request for your RentFlaw account. Here is your temporary password:</p>
+          <div style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 24px; text-align: center; margin: 20px 0;">
+            <span style="font-size: 22px; font-weight: 900; font-family: monospace; color: #111827; letter-spacing: 4px;">${tempPassword}</span>
+          </div>
+          <p style="color: #374151;">Please log in with this temporary password and <strong>change it immediately</strong> in your profile settings.</p>
+          <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">If you did not request a password reset, please ignore this email. Your account remains secure.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #9ca3af; font-size: 12px; text-align: center;">RentFlaw — Global Rental Management SaaS</p>
+        </div>
+      </div>
+      `,
+    );
+  }
 }

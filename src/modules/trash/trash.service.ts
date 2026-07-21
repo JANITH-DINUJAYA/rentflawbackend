@@ -157,11 +157,68 @@ export class TrashService {
     try {
       switch (type) {
         case 'property':
-          return await this.prisma.property.delete({ where: { id } });
+          return await this.prisma.$transaction(async (tx) => {
+            const floors = await tx.floor.findMany({ where: { property_id: id }, select: { id: true } });
+            const floorIds = floors.map(f => f.id);
+            const rooms = await tx.room.findMany({ where: { floor_id: { in: floorIds } }, select: { id: true } });
+            const roomIds = rooms.map(r => r.id);
+            const agreements = await tx.rentalAgreement.findMany({
+              where: { OR: [{ property_id: id }, { room_id: { in: roomIds } }] },
+              select: { id: true },
+            });
+            const agreementIds = agreements.map(a => a.id);
+            const invoices = await tx.invoice.findMany({ where: { agreement_id: { in: agreementIds } }, select: { id: true } });
+            const invoiceIds = invoices.map(i => i.id);
+
+            // 1. Delete payments and utility bills
+            await tx.paymentSubmission.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.utilityBill.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+
+            // 2. Delete invoices
+            await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+
+            // 3. Delete agreements
+            await tx.rentalAgreement.deleteMany({ where: { id: { in: agreementIds } } });
+
+            // 4. Delete rooms & floors
+            await tx.room.deleteMany({ where: { id: { in: roomIds } } });
+            await tx.floor.deleteMany({ where: { id: { in: floorIds } } });
+
+            // 5. Delete property
+            return tx.property.delete({ where: { id } });
+          });
+
         case 'floor':
-          return await this.prisma.floor.delete({ where: { id } });
+          return await this.prisma.$transaction(async (tx) => {
+            const rooms = await tx.room.findMany({ where: { floor_id: id }, select: { id: true } });
+            const roomIds = rooms.map(r => r.id);
+            const agreements = await tx.rentalAgreement.findMany({ where: { room_id: { in: roomIds } }, select: { id: true } });
+            const agreementIds = agreements.map(a => a.id);
+            const invoices = await tx.invoice.findMany({ where: { agreement_id: { in: agreementIds } }, select: { id: true } });
+            const invoiceIds = invoices.map(i => i.id);
+
+            await tx.paymentSubmission.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.utilityBill.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+            await tx.rentalAgreement.deleteMany({ where: { id: { in: agreementIds } } });
+            await tx.room.deleteMany({ where: { id: { in: roomIds } } });
+            return tx.floor.delete({ where: { id } });
+          });
+
         case 'room':
-          return await this.prisma.room.delete({ where: { id } });
+          return await this.prisma.$transaction(async (tx) => {
+            const agreements = await tx.rentalAgreement.findMany({ where: { room_id: id }, select: { id: true } });
+            const agreementIds = agreements.map(a => a.id);
+            const invoices = await tx.invoice.findMany({ where: { agreement_id: { in: agreementIds } }, select: { id: true } });
+            const invoiceIds = invoices.map(i => i.id);
+
+            await tx.paymentSubmission.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.utilityBill.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+            await tx.rentalAgreement.deleteMany({ where: { id: { in: agreementIds } } });
+            return tx.room.delete({ where: { id } });
+          });
+
         case 'utility bill':
         case 'utilitybill':
           return await this.prisma.utilityBill.delete({ where: { id } });
@@ -177,8 +234,8 @@ export class TrashService {
         default:
           throw new BadRequestException(`Unknown entity type for permanent deletion: ${entityType}`);
       }
-    } catch {
-      throw new NotFoundException(`Failed to permanently delete ${entityType} record.`);
+    } catch (err: any) {
+      throw new NotFoundException(`Failed to permanently delete ${entityType} record: ${err.message}`);
     }
   }
 }

@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { AgreementStatus, InvoiceStatus } from '@prisma/client';
 
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
-  async getIncomeReport(landlordId: string, month: number, year: number) {
+  async getIncomeReport(landlordId: string | null, month: number, year: number) {
     const invoices = await this.prisma.invoice.findMany({
       where: {
-        landlord_id: landlordId,
-        status: 'PAID',
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+        status: InvoiceStatus.PAID,
         due_date: {
           gte: new Date(year, month - 1, 1),
           lt: new Date(year, month, 1),
@@ -19,16 +20,21 @@ export class ReportsService {
     });
 
     const totalIncome = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
-    return { month, year, totalIncome };
+    return { month, year, totalIncome, invoicesCount: invoices.length };
   }
 
-  async getOccupancyReport(landlordId: string) {
+  async getOccupancyReport(landlordId: string | null) {
     const totalRooms = await this.prisma.room.count({
-      where: { floor: { property: { landlord_id: landlordId } } },
+      where: landlordId
+        ? { floor: { property: { landlord_id: landlordId } } }
+        : {},
     });
 
     const occupiedRooms = await this.prisma.rentalAgreement.count({
-      where: { landlord_id: landlordId, status: 'ACTIVE' },
+      where: {
+        status: AgreementStatus.ACTIVE,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
     });
 
     return {
@@ -39,16 +45,17 @@ export class ReportsService {
     };
   }
 
-  async getOverdueReport(landlordId: string) {
+  async getOverdueReport(landlordId: string | null) {
     const overdueInvoices = await this.prisma.invoice.findMany({
       where: {
-        landlord_id: landlordId,
-        status: 'OVERDUE',
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+        status: InvoiceStatus.OVERDUE,
       },
       include: {
         agreement: {
-          select: {
+          include: {
             tenant: { select: { first_name: true, last_name: true, email: true } },
+            property: { select: { name: true } },
           },
         },
       },
@@ -58,9 +65,12 @@ export class ReportsService {
     return { overdueInvoices, totalOverdue };
   }
 
-  async getTenantReport(landlordId: string) {
+  async getTenantReport(landlordId: string | null) {
     const activeAgreements = await this.prisma.rentalAgreement.findMany({
-      where: { landlord_id: landlordId, status: 'ACTIVE' },
+      where: {
+        status: AgreementStatus.ACTIVE,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
       include: {
         tenant: {
           select: {
@@ -75,7 +85,7 @@ export class ReportsService {
       },
     });
 
-    return activeAgreements.map(a => ({
+    return activeAgreements.map((a: any) => ({
       tenantName: `${a.tenant.first_name} ${a.tenant.last_name}`,
       email: a.tenant.email,
       phone: a.tenant.phone,
