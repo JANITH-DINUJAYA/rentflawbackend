@@ -136,7 +136,48 @@ export class PropertiesService {
 
     return this.prisma.property.update({
       where: { id: propertyId },
-      data: { is_archived: true },
+      data: { is_archived: true, updated_at: new Date() },
+    });
+  }
+
+  async bulkArchive(landlordId: string | null, ids: string[]) {
+    // Verify landlord owns all selected properties
+    const properties = await this.prisma.property.findMany({
+      where: {
+        id: { in: ids },
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
+    });
+    if (properties.length !== ids.length) {
+      throw new ForbiddenException('Some properties do not exist or access is denied.');
+    }
+
+    // Check active agreements on all selected properties
+    const activeAgreements = await this.prisma.rentalAgreement.count({
+      where: { property_id: { in: ids }, status: 'ACTIVE' },
+    });
+    if (activeAgreements > 0) {
+      throw new ConflictException(
+        `Cannot archive: Active agreement(s) exist on one or more selected properties.`,
+      );
+    }
+
+    // Check pending invoices on all selected properties
+    const pendingInvoices = await this.prisma.invoice.count({
+      where: {
+        agreement: { property_id: { in: ids } },
+        status: { in: ['PENDING', 'OVERDUE'] },
+      },
+    });
+    if (pendingInvoices > 0) {
+      throw new ConflictException(
+        `Cannot archive: Pending/overdue invoice(s) remain on one or more selected properties.`,
+      );
+    }
+
+    return this.prisma.property.updateMany({
+      where: { id: { in: ids } },
+      data: { is_archived: true, updated_at: new Date() },
     });
   }
 }

@@ -51,10 +51,31 @@ export class FloorsController {
     return this.floorsService.findOne(id, landlordId);
   }
 
+  @ApiOperation({ summary: 'Update a floor name' })
+  @Patch(':id')
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: { name: string },
+  ) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.floorsService.update(id, landlordId, dto);
+  }
+
   @ApiOperation({ summary: 'Archive a floor' })
   @Patch(':id/archive')
   archive(@CurrentUser() user: any, @Param('id') id: string) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.floorsService.archive(id, landlordId);
+  }
+
+  @ApiOperation({ summary: 'Bulk archive multiple floors' })
+  @Post('bulk-archive')
+  bulkArchive(
+    @CurrentUser() user: any,
+    @Body() dto: { ids: string[] },
+  ) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.floorsService.bulkArchive(dto.ids, landlordId);
   }
 }

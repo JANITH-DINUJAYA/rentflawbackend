@@ -47,6 +47,14 @@ export class FloorsService {
     return floor;
   }
 
+  async update(id: string, landlordId: string, dto: { name: string }) {
+    await this.findOne(id, landlordId);
+    return this.prisma.floor.update({
+      where: { id },
+      data: { name: dto.name },
+    });
+  }
+
   async archive(id: string, landlordId: string) {
     await this.findOne(id, landlordId);
 
@@ -62,7 +70,36 @@ export class FloorsService {
 
     return this.prisma.floor.update({
       where: { id },
-      data: { is_archived: true },
+      data: { is_archived: true, updated_at: new Date() },
+    });
+  }
+
+  async bulkArchive(ids: string[], landlordId: string) {
+    // Check active agreements on all selected floors
+    const activeAgreements = await this.prisma.rentalAgreement.count({
+      where: {
+        room: { floor_id: { in: ids } },
+        status: 'ACTIVE',
+      },
+    });
+    if (activeAgreements > 0) {
+      throw new BadRequestException('Cannot archive selected floors: One or more rooms have active agreements.');
+    }
+
+    // Verify all floors belong to the landlord
+    const floorsCount = await this.prisma.floor.count({
+      where: {
+        id: { in: ids },
+        property: { landlord_id: landlordId },
+      },
+    });
+    if (floorsCount !== ids.length) {
+      throw new ForbiddenException('Some floors do not exist or access is denied.');
+    }
+
+    return this.prisma.floor.updateMany({
+      where: { id: { in: ids } },
+      data: { is_archived: true, updated_at: new Date() },
     });
   }
 }

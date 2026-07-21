@@ -71,4 +71,14 @@ export class PropertiesController {
   archive(@CurrentUser() user: any, @Param('id') id: string) {
     return this.propertiesService.archive(this.getLandlordId(user), id);
   }
+
+  @ApiOperation({ summary: 'Bulk soft archive properties' })
+  @Post('bulk-archive')
+  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+  bulkArchive(
+    @CurrentUser() user: any,
+    @Body() dto: { ids: string[] },
+  ) {
+    return this.propertiesService.bulkArchive(this.getLandlordId(user), dto.ids);
+  }
 }

@@ -60,7 +60,14 @@ export class LandlordsController {
   @Roles(GlobalRole.LANDLORD)
   updateProfile(
     @CurrentUser() user: any,
-    @Body() dto: { company_name?: string },
+    @Body() dto: {
+      company_name?: string;
+      bank_name?: string;
+      account_name?: string;
+      account_number?: string;
+      branch_name?: string;
+      swift_code?: string;
+    },
   ) {
     const landlordId = user.landlord_profile?.id;
     return this.landlordsService.update(landlordId, dto);

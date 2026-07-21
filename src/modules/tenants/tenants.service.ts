@@ -20,6 +20,11 @@ export class TenantsService {
           include: {
             property: { select: { name: true, address: true } },
             room: { select: { room_number: true } },
+            landlord: {
+              include: {
+                user: { select: { first_name: true, last_name: true } },
+              },
+            },
           },
         },
         payment_submissions: {

@@ -164,6 +164,13 @@ model Landlord {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  // Bank details for receiving rent payments from tenants
+  bank_name      String? @db.VarChar(100)
+  account_name   String? @db.VarChar(100)
+  account_number String? @db.VarChar(50)
+  branch_name    String? @db.VarChar(100)
+  swift_code     String? @db.VarChar(20)
+
   // Relations
   user                      User                      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   custom_roles              CustomRole[]

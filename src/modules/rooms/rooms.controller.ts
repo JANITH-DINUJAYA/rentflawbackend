@@ -54,10 +54,37 @@ export class RoomsController {
     return this.roomsService.findOne(id, landlordId);
   }
 
+  @ApiOperation({ summary: 'Update a room details' })
+  @Patch(':id')
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body()
+    dto: {
+      room_number?: string;
+      occupancy_type?: OccupancyType;
+      capacity?: number;
+      base_rent?: number;
+    },
+  ) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.roomsService.update(id, landlordId, dto);
+  }
+
   @ApiOperation({ summary: 'Archive a room' })
   @Patch(':id/archive')
   archive(@CurrentUser() user: any, @Param('id') id: string) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.roomsService.archive(id, landlordId);
+  }
+
+  @ApiOperation({ summary: 'Bulk archive multiple rooms' })
+  @Post('bulk-archive')
+  bulkArchive(
+    @CurrentUser() user: any,
+    @Body() dto: { ids: string[] },
+  ) {
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.roomsService.bulkArchive(dto.ids, landlordId);
   }
 }

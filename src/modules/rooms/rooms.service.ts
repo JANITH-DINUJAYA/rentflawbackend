@@ -66,6 +66,28 @@ export class RoomsService {
     return room;
   }
 
+  async update(
+    id: string,
+    landlordId: string,
+    dto: {
+      room_number?: string;
+      occupancy_type?: OccupancyType;
+      capacity?: number;
+      base_rent?: number;
+    },
+  ) {
+    await this.findOne(id, landlordId);
+    return this.prisma.room.update({
+      where: { id },
+      data: {
+        room_number: dto.room_number,
+        occupancy_type: dto.occupancy_type,
+        capacity: dto.capacity,
+        base_rent: dto.base_rent,
+      },
+    });
+  }
+
   async archive(id: string, landlordId: string) {
     await this.findOne(id, landlordId);
 
@@ -78,7 +100,36 @@ export class RoomsService {
 
     return this.prisma.room.update({
       where: { id },
-      data: { is_archived: true },
+      data: { is_archived: true, updated_at: new Date() },
+    });
+  }
+
+  async bulkArchive(ids: string[], landlordId: string) {
+    // Check active agreements on all selected rooms
+    const activeAgreements = await this.prisma.rentalAgreement.count({
+      where: {
+        room_id: { in: ids },
+        status: 'ACTIVE',
+      },
+    });
+    if (activeAgreements > 0) {
+      throw new BadRequestException('Cannot archive selected rooms: One or more rooms have active agreements.');
+    }
+
+    // Verify all rooms belong to the landlord
+    const roomsCount = await this.prisma.room.count({
+      where: {
+        id: { in: ids },
+        floor: { property: { landlord_id: landlordId } },
+      },
+    });
+    if (roomsCount !== ids.length) {
+      throw new ForbiddenException('Some rooms do not exist or access is denied.');
+    }
+
+    return this.prisma.room.updateMany({
+      where: { id: { in: ids } },
+      data: { is_archived: true, updated_at: new Date() },
     });
   }
 

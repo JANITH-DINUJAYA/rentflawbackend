@@ -67,6 +67,11 @@ export class LandlordsService {
     phone?: string;
     nic_or_passport?: string;
     email?: string;
+    bank_name?: string;
+    account_name?: string;
+    account_number?: string;
+    branch_name?: string;
+    swift_code?: string;
   }) {
     const landlord = await this.findOne(id);
 
@@ -93,6 +98,11 @@ export class LandlordsService {
         where: { id },
         data: {
           company_name: dto.company_name,
+          bank_name: dto.bank_name,
+          account_name: dto.account_name,
+          account_number: dto.account_number,
+          branch_name: dto.branch_name,
+          swift_code: dto.swift_code,
         },
         include: { user: true },
       });

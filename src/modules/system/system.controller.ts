@@ -15,6 +15,8 @@ import { SystemService } from './system.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GlobalRole } from '@prisma/client';
+import { CreateBankAccountDto } from './dto/create-bank-account.dto';
+import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
 
 @ApiTags('System')
 @ApiBearerAuth()
@@ -54,16 +56,7 @@ export class SystemController {
   @ApiOperation({ summary: 'Create new platform bank account — SAAS_ADMIN only' })
   @Post('bank-accounts')
   @Roles(GlobalRole.SAAS_ADMIN)
-  createBankAccount(
-    @Body()
-    dto: {
-      bank_name: string;
-      account_name: string;
-      account_number: string;
-      branch_name?: string;
-      swift_code?: string;
-    },
-  ) {
+  createBankAccount(@Body() dto: CreateBankAccountDto) {
     return this.systemService.createBankAccount(dto);
   }
 
@@ -72,15 +65,7 @@ export class SystemController {
   @Roles(GlobalRole.SAAS_ADMIN)
   updateBankAccount(
     @Param('id') id: string,
-    @Body()
-    dto: {
-      bank_name?: string;
-      account_name?: string;
-      account_number?: string;
-      branch_name?: string;
-      swift_code?: string;
-      is_active?: boolean;
-    },
+    @Body() dto: UpdateBankAccountDto,
   ) {
     return this.systemService.updateBankAccount(id, dto);
   }
