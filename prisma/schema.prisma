@@ -165,14 +165,16 @@ model Landlord {
   updated_at DateTime @updatedAt
 
   // Relations
-  user              User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  custom_roles      CustomRole[]
-  staff_profiles    StaffProfile[]
-  properties        Property[]
-  rental_agreements RentalAgreement[] @relation("LandlordAgreements")
-  invoices          Invoice[]
-  utility_bills     UtilityBill[]
-  subscription      LandlordSubscription?
+  user                      User                      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  custom_roles              CustomRole[]
+  staff_profiles            StaffProfile[]
+  properties                Property[]
+  rental_agreements         RentalAgreement[]         @relation("LandlordAgreements")
+  invoices                  Invoice[]
+  utility_bills             UtilityBill[]
+  subscription              LandlordSubscription?
+  custom_package_requests   CustomPackageRequest[]
+  subscription_bank_payments SubscriptionBankPayment[]
 
   @@index([user_id])
   @@map("landlords")
@@ -225,10 +227,12 @@ model Permission {
 // ─────────────────────────────────────────────
 
 model StaffProfile {
-  id          String @id @default(uuid()) @db.VarChar(36)
-  user_id     String @unique @db.VarChar(36)
-  landlord_id String? @db.VarChar(36) // Optional for system/SaaS admin staff
-  role_id     String @db.VarChar(36)
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  user_id     String    @unique @db.VarChar(36)
+  landlord_id String?   @db.VarChar(36) // Optional for system/SaaS admin staff
+  role_id     String    @db.VarChar(36)
+  is_archived Boolean   @default(false)
+  archived_at DateTime?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -457,6 +461,8 @@ model UtilityBill {
   rate_per_unit          Decimal?    @db.Decimal(10, 2)
   // Derived: (current - previous) * rate_per_unit, or flat amount
   amount                 Decimal     @db.Decimal(10, 2)
+  is_archived            Boolean     @default(false)
+  archived_at            DateTime?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -526,20 +532,25 @@ model SupportTicket {
 // ─────────────────────────────────────────────
 
 model SubscriptionPackage {
-  id             String       @id @default(uuid()) @db.VarChar(36)
-  name           String       @unique @db.VarChar(50)
-  price          Decimal      @db.Decimal(10, 2)
-  billing_cycle  BillingCycle @default(MONTHLY)
-  max_properties Int
-  max_tenants    Int
-  max_staff      Int
-  is_active      Boolean      @default(true)
+  id                 String       @id @default(uuid()) @db.VarChar(36)
+  name               String       @unique @db.VarChar(50)
+  price              Decimal      @db.Decimal(10, 2)
+  billing_cycle      BillingCycle @default(MONTHLY)
+  max_properties     Int
+  max_tenants        Int
+  max_staff          Int
+  is_active          Boolean      @default(true)
+  is_custom          Boolean      @default(false)
+  target_landlord_id String?      @db.VarChar(36)
+  is_archived        Boolean      @default(false)
+  archived_at        DateTime?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   // Relations
-  landlord_subscriptions LandlordSubscription[]
+  landlord_subscriptions   LandlordSubscription[]
+  subscription_bank_payments SubscriptionBankPayment[]
 
   @@map("subscription_packages")
 }
@@ -609,4 +620,74 @@ model Message {
   @@index([receiver_id])
   @@map("messages")
 }
+
+// ─────────────────────────────────────────────
+// TABLE 19: SystemBankAccounts
+// SaaS platform bank details for offline payments.
+// ─────────────────────────────────────────────
+
+model SystemBankAccount {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  bank_name      String   @db.VarChar(100)
+  account_name   String   @db.VarChar(100)
+  account_number String   @db.VarChar(50)
+  branch_name    String?  @db.VarChar(100)
+  swift_code     String?  @db.VarChar(20)
+  is_active      Boolean  @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("system_bank_accounts")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 20: CustomPackageRequests
+// Custom subscription requests from landlords.
+// ─────────────────────────────────────────────
+
+model CustomPackageRequest {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  landlord_id    String   @db.VarChar(36)
+  max_properties Int
+  max_tenants    Int
+  max_staff      Int
+  notes          String?  @db.Text
+  status         String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  offered_price  Decimal? @db.Decimal(10, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  landlord Landlord @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+
+  @@index([landlord_id])
+  @@map("custom_package_requests")
+}
+
+// ─────────────────────────────────────────────
+// TABLE 21: SubscriptionBankPayments
+// Bank transfer payment slip submissions for subscriptions.
+// ─────────────────────────────────────────────
+
+model SubscriptionBankPayment {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  landlord_id String   @db.VarChar(36)
+  package_id  String   @db.VarChar(36)
+  amount      Decimal  @db.Decimal(10, 2)
+  receipt_url String   @db.VarChar(500)
+  status      String   @default("PENDING_REVIEW") // PENDING_REVIEW, APPROVED, REJECTED
+  notes       String?  @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  landlord Landlord            @relation(fields: [landlord_id], references: [id], onDelete: Cascade)
+  package  SubscriptionPackage @relation(fields: [package_id], references: [id], onDelete: Cascade)
+
+  @@index([landlord_id])
+  @@index([status])
+  @@map("subscription_bank_payments")
+}
+
 

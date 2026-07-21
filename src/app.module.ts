@@ -27,6 +27,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { MessagesModule } from './modules/messages/messages.module';
 import { JobsModule } from './jobs/jobs.module';
 import { SystemModule } from './modules/system/system.module';
+import { TrashModule } from './modules/trash/trash.module';
 import { MaintenanceGuard } from './common/guards/maintenance.guard';
 
 @Module({
@@ -53,6 +54,9 @@ import { MaintenanceGuard } from './common/guards/maintenance.guard';
 
     // ─── Feature Modules ─────────────────────────
     SystemModule,
+    JobsModule,
+    SystemModule,
+    TrashModule,
     AuthModule,
     UsersModule,
     LandlordsModule,
