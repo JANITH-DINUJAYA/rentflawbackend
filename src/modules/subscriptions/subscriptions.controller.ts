@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -17,17 +18,53 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GlobalRole } from '@prisma/client';
 import { UpdatePackageDto } from './dto/update-package.dto';
+import { PrismaService } from '../../database/prisma.service';
+import { JwtService } from '@nestjs/jwt';
 
 @ApiTags('Subscriptions')
 @ApiBearerAuth()
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  @ApiOperation({ summary: 'List all active subscription packages (optional landlord filter for custom plans)' })
+  @ApiOperation({ summary: 'List all active subscription packages (filtered by landlord for custom plans)' })
   @Get('packages')
-  getAllPackages(@Query('landlordId') landlordId?: string) {
-    return this.subscriptionsService.getAllPackages(landlordId);
+  async getAllPackages(@Req() req: any, @Query('landlordId') queryLandlordId?: string) {
+    let landlordId: string | undefined = queryLandlordId;
+    let isAdmin = false;
+
+    const authHeader = req.headers?.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded: any = this.jwtService.decode(token);
+        if (decoded) {
+          if (decoded.global_role === GlobalRole.SAAS_ADMIN) {
+            isAdmin = true;
+          } else if (decoded.global_role === GlobalRole.LANDLORD) {
+            const landlord = await this.prisma.landlord.findUnique({
+              where: { user_id: decoded.sub || decoded.id },
+              select: { id: true },
+            });
+            if (landlord) landlordId = landlord.id;
+          } else if (decoded.global_role === GlobalRole.STAFF) {
+            const staff = await this.prisma.staffProfile.findUnique({
+              where: { user_id: decoded.sub || decoded.id },
+              select: { landlord_id: true },
+            });
+            if (staff && staff.landlord_id) landlordId = staff.landlord_id;
+          }
+        }
+      } catch {
+        // Fallback to public view
+      }
+    }
+
+    return this.subscriptionsService.getAllPackages(landlordId, isAdmin);
   }
 
   @ApiOperation({ summary: 'Create a new subscription package — Admin only' })

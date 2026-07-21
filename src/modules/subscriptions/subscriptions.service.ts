@@ -5,20 +5,25 @@ import { PrismaService } from '../../database/prisma.service';
 export class SubscriptionsService {
   constructor(private prisma: PrismaService) {}
 
-  async getAllPackages(landlordId?: string) {
+  async getAllPackages(landlordId?: string, isAdmin = false) {
     const where: any = {
       is_active: true,
       is_archived: false,
     };
 
-    if (landlordId) {
+    if (isAdmin) {
+      // SAAS Admin view shows standard plans + all custom plans
+      where.OR = undefined;
+    } else if (landlordId) {
+      // Landlord view shows standard plans + custom plans targeted specifically to this landlord
       where.OR = [
         { is_custom: false, target_landlord_id: null },
         { target_landlord_id: landlordId },
       ];
     } else {
-      // SAAS Admin view shows standard plans + all custom plans
-      where.OR = undefined;
+      // Unauthenticated / public view shows ONLY standard public packages
+      where.is_custom = false;
+      where.target_landlord_id = null;
     }
 
     return this.prisma.subscriptionPackage.findMany({
