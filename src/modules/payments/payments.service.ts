@@ -10,11 +10,14 @@ import { PaymentSubmissionStatus } from '@prisma/client';
 import { InvoicesService } from '../invoices/invoices.service';
 import * as crypto from 'crypto';
 
+import { NotificationsService } from '../notifications/notifications.service';
+
 @Injectable()
 export class PaymentsService {
   constructor(
     private prisma: PrismaService,
     private invoicesService: InvoicesService,
+    private notifications: NotificationsService,
   ) {}
 
   // ─── SUBMIT PAYMENT PROOF ─────────────────────
@@ -33,6 +36,16 @@ export class PaymentsService {
     // Verify tenant has an active agreement
     const activeLease = await this.prisma.rentalAgreement.findFirst({
       where: { tenant_id: tenantId, status: 'ACTIVE' },
+      include: {
+        landlord: {
+          include: {
+            user: { select: { id: true, email: true } }
+          }
+        },
+        tenant: { select: { first_name: true, last_name: true } },
+        property: { select: { name: true } },
+        room: { select: { room_number: true } }
+      }
     });
     if (!activeLease) {
       throw new ForbiddenException('You must have an active lease agreement to submit payments.');
@@ -77,31 +90,49 @@ export class PaymentsService {
       select: { id: true },
     });
 
-    if (existingPending) {
-      // Update the existing submission instead of creating a new one
-      return this.prisma.paymentSubmission.update({
-        where: { id: existingPending.id },
-        data: {
-          amount_paid: dto.amount_paid,
-          payment_date: dto.payment_date,
-          receipt_url: dto.receipt_url,
-          status: PaymentSubmissionStatus.PENDING_REVIEW,
-          notes: null,
-          reviewed_by: null,
-          reviewed_at: null,
-        },
-      });
-    }
+    const submissionResult = existingPending
+      ? await this.prisma.paymentSubmission.update({
+          where: { id: existingPending.id },
+          data: {
+            amount_paid: dto.amount_paid,
+            payment_date: dto.payment_date,
+            receipt_url: dto.receipt_url,
+            status: PaymentSubmissionStatus.PENDING_REVIEW,
+            notes: null,
+            reviewed_by: null,
+            reviewed_at: null,
+          },
+        })
+      : await this.prisma.paymentSubmission.create({
+          data: {
+            invoice_id: dto.invoice_id,
+            tenant_id: tenantId,
+            amount_paid: dto.amount_paid,
+            payment_date: dto.payment_date,
+            receipt_url: dto.receipt_url,
+          },
+        });
 
-    return this.prisma.paymentSubmission.create({
-      data: {
-        invoice_id: dto.invoice_id,
-        tenant_id: tenantId,
-        amount_paid: dto.amount_paid,
-        payment_date: dto.payment_date,
-        receipt_url: dto.receipt_url,
-      },
-    });
+    // Send notifications to landlord
+    const tenantName = `${activeLease.tenant.first_name} ${activeLease.tenant.last_name}`;
+    const propName = `${activeLease.property.name} (Room ${activeLease.room.room_number})`;
+
+    // 1. In-app notification
+    await this.notifications.createNotification(
+      activeLease.landlord.user.id,
+      'New Payment Submission',
+      `${tenantName} submitted a payment receipt of Rs ${dto.amount_paid.toFixed(2)} for ${propName}.`,
+    );
+
+    // 2. Email notification
+    await this.notifications.sendPaymentSubmitted(
+      activeLease.landlord.user.email,
+      tenantName,
+      dto.amount_paid,
+      propName,
+    );
+
+    return submissionResult;
   }
 
   // ─── APPROVE PAYMENT ──────────────────────────
@@ -112,7 +143,7 @@ export class PaymentsService {
     reviewerId: string,
     landlordId: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Lock the row to prevent concurrent approvals
       const rows: any[] = await tx.$queryRaw`
         SELECT id, status, is_locked, invoice_id, tenant_id, amount_paid
@@ -155,8 +186,36 @@ export class PaymentsService {
         Number(submission.amount_paid),
       );
 
-      return { message: 'Payment approved successfully', submission_id: submissionId };
+      // Load tenant details for notification
+      const tenant = await tx.user.findUnique({
+        where: { id: submission.tenant_id },
+        select: { email: true, first_name: true, last_name: true },
+      });
+
+      return { submission, tenant };
     });
+
+    // Send notifications outside transaction
+    if (result.tenant) {
+      const tenantName = `${result.tenant.first_name} ${result.tenant.last_name}`;
+
+      // 1. In-app notification
+      await this.notifications.createNotification(
+        result.submission.tenant_id,
+        'Payment Approved',
+        `Your payment submission of Rs ${Number(result.submission.amount_paid).toFixed(2)} has been approved.`,
+      );
+
+      // 2. Email notification
+      await this.notifications.sendPaymentApproved(
+        result.tenant.email,
+        tenantName,
+        Number(result.submission.amount_paid),
+        result.submission.invoice_id.slice(0, 8),
+      );
+    }
+
+    return { message: 'Payment approved successfully', submission_id: submissionId };
   }
 
   // ─── REJECT PAYMENT ───────────────────────────
@@ -167,14 +226,14 @@ export class PaymentsService {
   ) {
     const submission = await this.prisma.paymentSubmission.findFirst({
       where: { id: submissionId, status: 'PENDING_REVIEW', is_locked: false },
-      select: { id: true },
+      select: { id: true, tenant_id: true, amount_paid: true, invoice_id: true },
     });
 
     if (!submission) {
       throw new NotFoundException('Submission not found or already processed');
     }
 
-    return this.prisma.paymentSubmission.update({
+    const updated = await this.prisma.paymentSubmission.update({
       where: { id: submissionId },
       data: {
         status: PaymentSubmissionStatus.REJECTED,
@@ -183,6 +242,33 @@ export class PaymentsService {
         notes,
       },
     });
+
+    // Load tenant details for notification
+    const tenant = await this.prisma.user.findUnique({
+      where: { id: submission.tenant_id },
+      select: { email: true, first_name: true, last_name: true },
+    });
+
+    if (tenant) {
+      const tenantName = `${tenant.first_name} ${tenant.last_name}`;
+
+      // 1. In-app notification
+      await this.notifications.createNotification(
+        submission.tenant_id,
+        'Payment Rejected',
+        `Your payment submission of Rs ${Number(submission.amount_paid).toFixed(2)} was rejected. Reason: ${notes}`,
+      );
+
+      // 2. Email notification
+      await this.notifications.sendPaymentRejected(
+        tenant.email,
+        tenantName,
+        notes,
+        submission.invoice_id.slice(0, 8),
+      );
+    }
+
+    return updated;
   }
 
   // ─── GET ALL SUBMISSIONS (Landlord) ──────────

@@ -95,6 +95,17 @@ export class NotificationsService {
     );
   }
 
+  async sendPaymentSubmitted(to: string, tenantName: string, amount: number, propertyName: string): Promise<void> {
+    await this.sendGenericEmail(
+      to,
+      'New Payment Submission — RentFlaw',
+      `<p>Hi there,</p>
+       <p>Tenant <strong>${tenantName}</strong> has submitted a payment receipt of <strong>Rs ${amount.toFixed(2)}</strong> for <strong>${propertyName}</strong>.</p>
+       <p>Please log in to your landlord dashboard to review and approve this submission.</p>
+       <p><a href="${process.env.APP_URL || 'https://rentflaw.vercel.app'}/landlord/payments">Review Payments</a></p>`,
+    );
+  }
+
   async sendPaymentApproved(to: string, name: string, amount: number, invoiceRef: string): Promise<void> {
     await this.sendGenericEmail(
       to,

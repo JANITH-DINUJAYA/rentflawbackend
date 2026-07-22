@@ -57,7 +57,8 @@ export class FilesService {
 
     // Determine target resource endpoint (images vs generic files/PDFs)
     const isImage = file.mimetype.startsWith('image/');
-    const resourceType = isImage ? 'image' : 'raw';
+    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+    const resourceType = (isImage || isPdf) ? 'image' : 'raw';
 
     try {
       const response = await fetch(
