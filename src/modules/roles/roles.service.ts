@@ -77,4 +77,35 @@ export class RolesService {
       include: { permissions: true },
     });
   }
+
+  async updateRolePermissions(roleId: string, landlordId: string | null, actions: string[]) {
+    // Validate role belongs to landlord/system
+    const role = await this.prisma.customRole.findFirst({
+      where: { id: roleId, landlord_id: landlordId },
+    });
+    if (!role) throw new NotFoundException('Role not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Delete all existing permissions for this role
+      await tx.permission.deleteMany({
+        where: { role_id: roleId },
+      });
+
+      // 2. Insert new permissions
+      if (actions.length > 0) {
+        await tx.permission.createMany({
+          data: actions.map(action => ({
+            role_id: roleId,
+            action,
+          })),
+        });
+      }
+
+      // Return updated role
+      return tx.customRole.findUnique({
+        where: { id: roleId },
+        include: { permissions: true },
+      });
+    });
+  }
 }

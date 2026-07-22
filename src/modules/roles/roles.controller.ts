@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Body,
   Param,
@@ -71,5 +72,15 @@ export class RolesController {
     @CurrentUser() user: any,
   ) {
     return this.rolesService.removePermission(permissionId, this.getLandlordId(user));
+  }
+
+  @ApiOperation({ summary: 'Bulk update permissions for a role' })
+  @Put(':id/permissions')
+  updatePermissions(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() body: { actions: string[] },
+  ) {
+    return this.rolesService.updateRolePermissions(id, this.getLandlordId(user), body.actions);
   }
 }
