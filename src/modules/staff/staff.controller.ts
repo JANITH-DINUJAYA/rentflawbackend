@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -47,5 +48,11 @@ export class StaffController {
   @Delete(':id')
   removeStaff(@Param('id') id: string, @CurrentUser() user: any) {
     return this.staffService.removeStaff(this.getLandlordId(user), id);
+  }
+
+  @ApiOperation({ summary: 'Fix login access for a staff member whose global_role was not updated' })
+  @Patch(':id/fix-access')
+  fixStaffAccess(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.staffService.fixStaffAccess(this.getLandlordId(user), id);
   }
 }

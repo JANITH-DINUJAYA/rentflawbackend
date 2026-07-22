@@ -107,6 +107,25 @@ export class StaffService {
     return { message: 'Staff member removed successfully.' };
   }
 
+  async fixStaffAccess(landlordId: string | null, staffId: string) {
+    const member = await this.prisma.staffProfile.findFirst({
+      where: {
+        id: staffId,
+        ...(landlordId ? { landlord_id: landlordId } : {}),
+      },
+      include: { user: { select: { id: true, email: true, global_role: true } } },
+    });
+    if (!member) throw new NotFoundException('Staff member not found');
+
+    const targetRole = landlordId === null ? GlobalRole.SAAS_ADMIN : GlobalRole.STAFF;
+    await this.prisma.user.update({
+      where: { id: member.user.id },
+      data: { global_role: targetRole },
+    });
+
+    return { message: 'Login access fixed.', email: member.user.email, global_role: targetRole };
+  }
+
   async getStaff(landlordId: string | null) {
     return this.prisma.staffProfile.findMany({
       where: { landlord_id: landlordId },
