@@ -102,8 +102,9 @@ export class TenantsController {
 
   @ApiOperation({ summary: 'Process credit payout to tenant — Landlord only' })
   @Post(':id/payout-credit')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   payoutCredit(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.tenantsService.payoutCredit(user.landlord_profile.id, id);
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.tenantsService.payoutCredit(landlordId, id);
   }
 }

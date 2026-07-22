@@ -26,7 +26,7 @@ export class AgreementsController {
 
   @ApiOperation({ summary: 'Draft a new rental agreement — Landlord only' })
   @Post()
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   create(
     @CurrentUser() user: any,
     @Body()
@@ -45,14 +45,16 @@ export class AgreementsController {
       leaving_rule?: LeavingOption;
     },
   ) {
-    return this.agreementsService.create(user.landlord_profile.id, dto);
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.agreementsService.create(landlordId, dto);
   }
 
   @ApiOperation({ summary: 'Activate a draft agreement — Landlord only' })
   @Patch(':id/activate')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   activate(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.agreementsService.activate(user.landlord_profile.id, id);
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.agreementsService.activate(landlordId, id);
   }
 
   @ApiOperation({ summary: 'Accept lease invitation — Tenant only' })
@@ -64,7 +66,7 @@ export class AgreementsController {
 
   @ApiOperation({ summary: 'Terminate active agreement with proration exit calculations' })
   @Patch(':id/terminate')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   terminate(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -101,9 +103,10 @@ export class AgreementsController {
 
   @ApiOperation({ summary: 'Mark a deposit refund as paid — Landlord only' })
   @Patch('refunds/:id/pay')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   markRefundPaid(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.agreementsService.markRefundPaid(user.landlord_profile.id, id);
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
+    return this.agreementsService.markRefundPaid(landlordId, id);
   }
 
   @ApiOperation({ summary: 'Get active/past tenant agreement history — Tenant only' })

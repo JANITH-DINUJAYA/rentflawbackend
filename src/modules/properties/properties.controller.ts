@@ -31,12 +31,12 @@ export class PropertiesController {
 
   @ApiOperation({ summary: 'Create property — Landlord only' })
   @Post()
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   create(
     @CurrentUser() user: any,
     @Body() dto: { name: string; address: string; type: PropertyType },
   ) {
-    const landlordId = user.landlord_profile?.id;
+    const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.propertiesService.create(landlordId, dto);
   }
 
@@ -56,7 +56,7 @@ export class PropertiesController {
 
   @ApiOperation({ summary: 'Update property details' })
   @Patch(':id')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   update(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -67,14 +67,14 @@ export class PropertiesController {
 
   @ApiOperation({ summary: 'Soft archive a property' })
   @Patch(':id/archive')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   archive(@CurrentUser() user: any, @Param('id') id: string) {
     return this.propertiesService.archive(this.getLandlordId(user), id);
   }
 
   @ApiOperation({ summary: 'Bulk soft archive properties' })
   @Post('bulk-archive')
-  @Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
   bulkArchive(
     @CurrentUser() user: any,
     @Body() dto: { ids: string[] },

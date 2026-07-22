@@ -77,7 +77,7 @@ export class InvoicesController {
 
   @ApiOperation({ summary: 'Apply discount to a pending invoice' })
   @Patch(':id/discount')
-  @Roles(GlobalRole.LANDLORD)
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   applyDiscount(
     @CurrentUser() user: any,
     @Param('id') id: string,

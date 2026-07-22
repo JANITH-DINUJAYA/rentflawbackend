@@ -20,7 +20,7 @@ import { GlobalRole } from '@prisma/client';
 @ApiTags('Staff')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
-@Roles(GlobalRole.LANDLORD, GlobalRole.SAAS_ADMIN)
+@Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
