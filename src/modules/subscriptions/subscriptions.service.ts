@@ -64,6 +64,40 @@ export class SubscriptionsService {
     });
     if (!pkg) throw new NotFoundException('Subscription package not found');
 
+    const existing = await this.prisma.landlordSubscription.findUnique({
+      where: { landlord_id: landlordId },
+      include: { package: true },
+    });
+
+    const isCurrentlyActive = existing && existing.status === 'ACTIVE' && new Date(existing.end_date) > new Date();
+
+    if (isCurrentlyActive) {
+      // Find highest priced package they paid for in the last 30 days
+      const payments = await this.prisma.subscriptionBankPayment.findMany({
+        where: {
+          landlord_id: landlordId,
+          status: 'APPROVED',
+          created_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+        select: { amount: true },
+      });
+
+      const maxPayment = payments.reduce((max, p) => Math.max(max, Number(p.amount)), 0);
+      const maxPaidPrice = Math.max(maxPayment, Number(existing.package.price));
+
+      if (Number(pkg.price) <= maxPaidPrice) {
+        // Allow instant switch preserving the billing cycle
+        return this.prisma.landlordSubscription.update({
+          where: { landlord_id: landlordId },
+          data: {
+            package_id: packageId,
+            status: 'ACTIVE',
+          },
+          include: { package: true },
+        });
+      }
+    }
+
     const startDate = new Date();
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1); // 1 month duration default
@@ -83,6 +117,7 @@ export class SubscriptionsService {
         start_date: startDate,
         end_date: endDate,
       },
+      include: { package: true },
     });
   }
 
@@ -91,8 +126,31 @@ export class SubscriptionsService {
       where: { landlord_id: landlordId },
       include: { package: true },
     });
-    if (!sub) throw new NotFoundException('No active subscription found');
-    return sub;
+    if (!sub) return null;
+
+    // Check if subscription is currently active
+    const isActive = sub.status === 'ACTIVE' && new Date(sub.end_date) > new Date();
+
+    let maxPaidPrice = 0;
+    if (isActive) {
+      // Find all approved payments in the last 30 days
+      const payments = await this.prisma.subscriptionBankPayment.findMany({
+        where: {
+          landlord_id: landlordId,
+          status: 'APPROVED',
+          created_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+        select: { amount: true },
+      });
+
+      const maxPayment = payments.reduce((max, p) => Math.max(max, Number(p.amount)), 0);
+      maxPaidPrice = Math.max(maxPayment, Number(sub.package.price));
+    }
+
+    return {
+      ...sub,
+      max_paid_price: maxPaidPrice,
+    };
   }
 
   async cancelSubscription(landlordId: string) {
