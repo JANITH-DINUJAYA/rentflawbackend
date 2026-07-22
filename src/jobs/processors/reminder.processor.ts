@@ -58,7 +58,7 @@ export class ReminderProcessor extends WorkerHost {
             daysAhead === 0 ? 'today' : `in ${daysAhead} day${daysAhead > 1 ? 's' : ''}`;
 
           this.logger.log(
-            `[REMINDER] Sending email to ${email} for rent of $${invoice.total_due} due ${daysLabel}`,
+            `[REMINDER] Sending email to ${email} for rent of Rs ${invoice.total_due} due ${daysLabel}`,
           );
 
           await this.notificationsService.sendRentReminder(

@@ -89,7 +89,7 @@ export class NotificationsService {
       to,
       `Rent Reminder: ${propertyName}`,
       `<p>Hello <strong>${name}</strong>,</p>
-       <p>This is a reminder that your rent of <strong>$${amount}</strong> for <strong>${propertyName}</strong> is due on <strong>${dueDate.toDateString()}</strong>.</p>
+       <p>This is a reminder that your rent of <strong>Rs ${amount}</strong> for <strong>${propertyName}</strong> is due on <strong>${dueDate.toDateString()}</strong>.</p>
        <p>Please log in to <a href="${process.env.APP_URL || 'https://rentflaw.vercel.app'}">RentFlaw</a> to settle your invoice.</p>
        <p>Thank you!</p>`,
     );
@@ -100,7 +100,7 @@ export class NotificationsService {
       to,
       'Payment Approved — RentFlaw',
       `<p>Hello <strong>${name}</strong>,</p>
-       <p>Your payment of <strong>$${amount}</strong> (ref: ${invoiceRef}) has been <strong>approved</strong> by your landlord.</p>
+       <p>Your payment of <strong>Rs ${amount}</strong> (ref: ${invoiceRef}) has been <strong>approved</strong> by your landlord.</p>
        <p>Your invoice has been marked as <strong>PAID</strong>. Thank you!</p>
        <p><a href="${process.env.APP_URL || 'https://rentflaw.vercel.app'}/tenant/invoices">View your invoices</a></p>`,
     );
@@ -153,7 +153,7 @@ export class NotificationsService {
       to,
       'Security Deposit Refund Paid — RentFlaw',
       `<p>Hello <strong>${name}</strong>,</p>
-       <p>Your landlord has processed and paid your security deposit refund of <strong>$${amount.toFixed(2)}</strong> for <strong>${propertyName}</strong>.</p>
+       <p>Your landlord has processed and paid your security deposit refund of <strong>Rs ${amount.toFixed(2)}</strong> for <strong>${propertyName}</strong>.</p>
        <p>Please check your bank account or contact your landlord for payment references.</p>
        <p>Thank you for using RentFlaw!</p>`,
     );
@@ -164,7 +164,7 @@ export class NotificationsService {
       to,
       'Overpaid Credit Refund Paid — RentFlaw',
       `<p>Hello <strong>${name}</strong>,</p>
-       <p>Your landlord has processed and settled your overpaid credit balance of <strong>$${amount.toFixed(2)}</strong>.</p>
+       <p>Your landlord has processed and settled your overpaid credit balance of <strong>Rs ${amount.toFixed(2)}</strong>.</p>
        <p>Please check your bank account or contact your landlord for payment references.</p>
        <p>Thank you!</p>`,
     );

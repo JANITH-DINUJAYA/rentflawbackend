@@ -78,7 +78,7 @@ export class TrashService {
       utilities.forEach(u => items.push({
         id: u.id,
         entity_type: 'Utility Bill',
-        name: `${u.type} Bill ($${Number(u.amount).toFixed(2)})`,
+        name: `${u.type} Bill (Rs ${Number(u.amount).toFixed(2)})`,
         archived_at: u.updated_at,
         days_remaining: calcDaysRemaining(u.updated_at),
       }));
@@ -107,7 +107,7 @@ export class TrashService {
         name: p.name,
         archived_at: p.archived_at || p.updated_at,
         days_remaining: calcDaysRemaining(p.archived_at || p.updated_at),
-        details: `$${Number(p.price).toFixed(2)}/mo`,
+        details: `Rs ${Number(p.price).toFixed(2)}/mo`,
       }));
 
       const users = await this.prisma.user.findMany({

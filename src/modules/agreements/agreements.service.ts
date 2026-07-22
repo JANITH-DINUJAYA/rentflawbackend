@@ -218,7 +218,7 @@ export class AgreementsService {
     if (unpaidInvoices.length > 0) {
       const totalOwed = unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total_due), 0);
       throw new BadRequestException(
-        `You have ${unpaidInvoices.length} unpaid invoice(s) totalling $${totalOwed.toFixed(2)}. Please settle all outstanding dues before requesting to leave.`,
+        `You have ${unpaidInvoices.length} unpaid invoice(s) totalling Rs ${totalOwed.toFixed(2)}. Please settle all outstanding dues before requesting to leave.`,
       );
     }
 
@@ -426,7 +426,7 @@ export class AgreementsService {
           refund_amount: refundAmount,
           deductions: deductFromDeposit ? Math.min(securityDeposit, totalDeductions) : 0,
           reason: deductFromDeposit
-            ? (deductionReason || `Offset outstanding dues ($${totalOutstanding.toFixed(2)}) & final month prorated rent ($${finalInvoiceAmount.toFixed(2)}).`)
+            ? (deductionReason || `Offset outstanding dues (Rs ${totalOutstanding.toFixed(2)}) & final month prorated rent (Rs ${finalInvoiceAmount.toFixed(2)}).`)
             : 'No deposit deductions. Full deposit refund processed.',
           processed_at: new Date(),
         },
@@ -437,7 +437,7 @@ export class AgreementsService {
     await this.notifications.createNotification(
       agreement.tenant_id,
       'Lease Terminated',
-      `Your lease agreement for Room ${agreement.room.room_number} has been officially terminated. ${deductFromDeposit ? `Dues offset from deposit. Refund amount: $${refundAmount.toFixed(2)}.` : `Final prorated invoice of $${finalInvoiceAmount.toFixed(2)} generated.`}`,
+      `Your lease agreement for Room ${agreement.room.room_number} has been officially terminated. ${deductFromDeposit ? `Dues offset from deposit. Refund amount: Rs ${refundAmount.toFixed(2)}.` : `Final prorated invoice of Rs ${finalInvoiceAmount.toFixed(2)} generated.`}`,
     );
 
     return {
@@ -588,7 +588,7 @@ export class AgreementsService {
     await this.notifications.createNotification(
       tenant.id,
       'Deposit Refund Processed',
-      `Your security deposit refund of $${Number(refund.refund_amount).toFixed(2)} for ${refund.agreement.property.name} has been marked as Paid by the landlord.`,
+      `Your security deposit refund of Rs ${Number(refund.refund_amount).toFixed(2)} for ${refund.agreement.property.name} has been marked as Paid by the landlord.`,
     );
 
     // 2. Email notification

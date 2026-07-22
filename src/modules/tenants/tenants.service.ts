@@ -248,7 +248,7 @@ export class TenantsService {
     await this.notifications.createNotification(
       tenantId,
       'Credit Balance Settle Payout',
-      `Your overpayment credit balance of $${paidAmount.toFixed(2)} has been paid out and settled by the landlord.`,
+      `Your overpayment credit balance of Rs ${paidAmount.toFixed(2)} has been paid out and settled by the landlord.`,
     );
 
     // 2. Email notification
