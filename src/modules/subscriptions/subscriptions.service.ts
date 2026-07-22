@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SubscriptionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async getAllPackages(landlordId?: string, isAdmin = false) {
     const where: any = {
@@ -218,7 +222,7 @@ export class SubscriptionsService {
       notes?: string;
     },
   ) {
-    return this.prisma.subscriptionBankPayment.create({
+    const payment = await this.prisma.subscriptionBankPayment.create({
       data: {
         landlord_id: landlordId,
         package_id: dto.package_id,
@@ -226,7 +230,37 @@ export class SubscriptionsService {
         receipt_url: dto.receipt_url,
         notes: dto.notes,
       },
+      include: {
+        landlord: {
+          include: {
+            user: { select: { first_name: true, last_name: true } }
+          }
+        },
+        package: { select: { name: true } }
+      }
     });
+
+    // Notify all SAAS Admin users
+    try {
+      const admins = await this.prisma.user.findMany({
+        where: { global_role: 'SAAS_ADMIN' },
+        select: { id: true }
+      });
+
+      const landlordName = payment.landlord.company_name || `${payment.landlord.user.first_name} ${payment.landlord.user.last_name}`;
+
+      for (const admin of admins) {
+        await this.notifications.createNotification(
+          admin.id,
+          'New Subscription Payment',
+          `Landlord "${landlordName}" submitted a payment slip of Rs ${dto.amount.toFixed(2)} for plan "${payment.package.name}".`,
+        );
+      }
+    } catch (e) {
+      // Don't fail the upload if notifications fail
+    }
+
+    return payment;
   }
 
   async getBankPayments(status?: string) {

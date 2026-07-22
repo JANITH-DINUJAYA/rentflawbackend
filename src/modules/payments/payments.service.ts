@@ -192,27 +192,50 @@ export class PaymentsService {
         select: { email: true, first_name: true, last_name: true },
       });
 
-      return { submission, tenant };
+      // Load landlord and staff details for notification
+      const landlord = await tx.landlord.findUnique({
+        where: { id: landlordId },
+        select: {
+          user_id: true,
+          staff_profiles: { select: { user_id: true } }
+        }
+      });
+
+      return { submission, tenant, landlord };
     });
 
     // Send notifications outside transaction
     if (result.tenant) {
       const tenantName = `${result.tenant.first_name} ${result.tenant.last_name}`;
+      const amountStr = Number(result.submission.amount_paid).toFixed(2);
 
-      // 1. In-app notification
+      // 1. Notify Tenant (In-app + Email)
       await this.notifications.createNotification(
         result.submission.tenant_id,
         'Payment Approved',
-        `Your payment submission of Rs ${Number(result.submission.amount_paid).toFixed(2)} has been approved.`,
+        `Your payment submission of Rs ${amountStr} has been approved.`,
       );
-
-      // 2. Email notification
       await this.notifications.sendPaymentApproved(
         result.tenant.email,
         tenantName,
         Number(result.submission.amount_paid),
         result.submission.invoice_id.slice(0, 8),
       );
+
+      // 2. Notify Landlord & Staff (In-app)
+      if (result.landlord) {
+        const notifyUserIds = new Set<string>();
+        notifyUserIds.add(result.landlord.user_id);
+        result.landlord.staff_profiles.forEach(s => notifyUserIds.add(s.user_id));
+
+        for (const uid of notifyUserIds) {
+          await this.notifications.createNotification(
+            uid,
+            'Payment Approved',
+            `Payment of Rs ${amountStr} from ${tenantName} has been approved.`,
+          );
+        }
+      }
     }
 
     return { message: 'Payment approved successfully', submission_id: submissionId };
@@ -226,7 +249,22 @@ export class PaymentsService {
   ) {
     const submission = await this.prisma.paymentSubmission.findFirst({
       where: { id: submissionId, status: 'PENDING_REVIEW', is_locked: false },
-      select: { id: true, tenant_id: true, amount_paid: true, invoice_id: true },
+      select: {
+        id: true,
+        tenant_id: true,
+        amount_paid: true,
+        invoice_id: true,
+        invoice: {
+          select: {
+            landlord: {
+              select: {
+                user_id: true,
+                staff_profiles: { select: { user_id: true } }
+              }
+            }
+          }
+        }
+      },
     });
 
     if (!submission) {
@@ -251,21 +289,35 @@ export class PaymentsService {
 
     if (tenant) {
       const tenantName = `${tenant.first_name} ${tenant.last_name}`;
+      const amountStr = Number(submission.amount_paid).toFixed(2);
 
-      // 1. In-app notification
+      // 1. Notify Tenant (In-app + Email)
       await this.notifications.createNotification(
         submission.tenant_id,
         'Payment Rejected',
-        `Your payment submission of Rs ${Number(submission.amount_paid).toFixed(2)} was rejected. Reason: ${notes}`,
+        `Your payment submission of Rs ${amountStr} was rejected. Reason: ${notes}`,
       );
-
-      // 2. Email notification
       await this.notifications.sendPaymentRejected(
         tenant.email,
         tenantName,
         notes,
         submission.invoice_id.slice(0, 8),
       );
+
+      // 2. Notify Landlord & Staff (In-app)
+      if (submission.invoice?.landlord) {
+        const notifyUserIds = new Set<string>();
+        notifyUserIds.add(submission.invoice.landlord.user_id);
+        submission.invoice.landlord.staff_profiles.forEach(s => notifyUserIds.add(s.user_id));
+
+        for (const uid of notifyUserIds) {
+          await this.notifications.createNotification(
+            uid,
+            'Payment Rejected',
+            `Payment of Rs ${amountStr} from ${tenantName} was rejected.`,
+          );
+        }
+      }
     }
 
     return updated;
