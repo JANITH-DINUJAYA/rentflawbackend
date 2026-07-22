@@ -96,6 +96,24 @@ export class TrashService {
         days_remaining: calcDaysRemaining(s.updated_at),
         details: s.user?.email || '',
       }));
+
+      // 6. Rental Agreements
+      const agreements = await this.prisma.rentalAgreement.findMany({
+        where: { landlord_id: landlordId, is_archived: true },
+        include: {
+          tenant: { select: { first_name: true, last_name: true } },
+          room: { select: { room_number: true } },
+          property: { select: { name: true } },
+        },
+      });
+      agreements.forEach(a => items.push({
+        id: a.id,
+        entity_type: 'Rental Agreement',
+        name: `Lease for Room ${a.room.room_number}`,
+        archived_at: a.updated_at,
+        days_remaining: calcDaysRemaining(a.updated_at),
+        details: `Tenant: ${a.tenant.first_name} ${a.tenant.last_name} (${a.property.name})`,
+      }));
     } else if (isAdmin) {
       // Admin sees packages and users archived
       const packages = await this.prisma.subscriptionPackage.findMany({
@@ -115,11 +133,11 @@ export class TrashService {
       });
       users.forEach(u => items.push({
         id: u.id,
-        entity_type: 'Deactivated User',
+        entity_type: u.global_role === 'LANDLORD' ? 'Landlord' : u.global_role === 'TENANT' ? 'Tenant' : 'Deactivated User',
         name: `${u.first_name} ${u.last_name}`,
         archived_at: u.updated_at,
         days_remaining: calcDaysRemaining(u.updated_at),
-        details: `${u.email} (${u.global_role})`,
+        details: u.global_role === 'LANDLORD' ? `${u.email} (Landlord)` : `${u.email} (Tenant)`,
       }));
     }
 
@@ -146,7 +164,12 @@ export class TrashService {
         return this.prisma.subscriptionPackage.update({ where: { id }, data: { is_archived: false, archived_at: null } });
       case 'deactivated user':
       case 'user':
+      case 'landlord':
+      case 'tenant':
         return this.prisma.user.update({ where: { id }, data: { is_active: true } });
+      case 'rental agreement':
+      case 'rentalagreement':
+        return this.prisma.rentalAgreement.update({ where: { id }, data: { is_archived: false } });
       default:
         throw new BadRequestException(`Unknown entity type for restoration: ${entityType}`);
     }
@@ -231,6 +254,36 @@ export class TrashService {
         case 'deactivated user':
         case 'user':
           return await this.prisma.user.delete({ where: { id } });
+        case 'landlord':
+          return await this.prisma.$transaction(async (tx) => {
+            const landlord = await tx.landlord.findUnique({ where: { user_id: id } });
+            if (landlord) {
+              await tx.landlordSubscription.deleteMany({ where: { landlord_id: landlord.id } });
+              await tx.customPackageRequest.deleteMany({ where: { landlord_id: landlord.id } });
+              await tx.staffProfile.deleteMany({ where: { landlord_id: landlord.id } });
+              await tx.rentalAgreement.deleteMany({ where: { landlord_id: landlord.id } });
+              await tx.property.deleteMany({ where: { landlord_id: landlord.id } });
+              await tx.landlord.delete({ where: { id: landlord.id } });
+            }
+            return tx.user.delete({ where: { id } });
+          });
+        case 'tenant':
+          return await this.prisma.$transaction(async (tx) => {
+            await tx.rentalAgreement.deleteMany({ where: { tenant_id: id } });
+            await tx.paymentSubmission.deleteMany({ where: { tenant_id: id } });
+            return tx.user.delete({ where: { id } });
+          });
+        case 'rental agreement':
+        case 'rentalagreement':
+          return await this.prisma.$transaction(async (tx) => {
+            const invoices = await tx.invoice.findMany({ where: { agreement_id: id }, select: { id: true } });
+            const invoiceIds = invoices.map(inv => inv.id);
+            await tx.paymentSubmission.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.utilityBill.deleteMany({ where: { invoice_id: { in: invoiceIds } } });
+            await tx.invoice.deleteMany({ where: { agreement_id: id } });
+            await tx.depositRefund.deleteMany({ where: { agreement_id: id } });
+            return tx.rentalAgreement.delete({ where: { id } });
+          });
         default:
           throw new BadRequestException(`Unknown entity type for permanent deletion: ${entityType}`);
       }

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -133,6 +134,14 @@ export class AgreementsController {
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.agreementsService.findOne(landlordId, id);
+  }
+
+  @ApiOperation({ summary: 'Soft-delete rental agreement — Landlord/Admin' })
+  @Delete(':id')
+  @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF, GlobalRole.SAAS_ADMIN)
+  delete(@CurrentUser() user: any, @Param('id') id: string) {
+    const landlordId = user.global_role === GlobalRole.SAAS_ADMIN ? null : (user.landlord_profile?.id || user.staff_profile?.landlord_id);
+    return this.agreementsService.delete(landlordId, id);
   }
 }
 

@@ -170,6 +170,13 @@ export class TenantsService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    const activeCount = await this.prisma.rentalAgreement.count({
+      where: { tenant_id: id, status: 'ACTIVE' },
+    });
+    if (activeCount > 0) {
+      throw new BadRequestException('Cannot delete tenant with active lease agreements. Terminate the agreements first.');
+    }
+
     return this.prisma.user.update({
       where: { id },
       data: { is_active: false },
@@ -177,6 +184,13 @@ export class TenantsService {
   }
 
   async bulkDelete(ids: string[]) {
+    const activeCount = await this.prisma.rentalAgreement.count({
+      where: { tenant_id: { in: ids }, status: 'ACTIVE' },
+    });
+    if (activeCount > 0) {
+      throw new BadRequestException('Cannot delete tenants with active lease agreements. Terminate the agreements first.');
+    }
+
     return this.prisma.user.updateMany({
       where: { id: { in: ids }, global_role: GlobalRole.TENANT },
       data: { is_active: false },

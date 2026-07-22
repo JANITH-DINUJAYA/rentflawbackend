@@ -357,6 +357,7 @@ model RentalAgreement {
   // If leaving_option = DECIDE_IN_AGREEMENT, this stores the actual chosen rule
   leaving_rule      LeavingOption?
   status            AgreementStatus @default(DRAFT)
+  is_archived       Boolean         @default(false)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

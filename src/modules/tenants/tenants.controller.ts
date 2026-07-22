@@ -78,16 +78,16 @@ export class TenantsController {
     return this.tenantsService.update(id, dto);
   }
 
-  @ApiOperation({ summary: 'Delete a specific tenant — Admin only' })
+  @ApiOperation({ summary: 'Delete a specific tenant — Admin/Landlord/Staff' })
   @Delete(':id')
-  @Roles(GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.SAAS_ADMIN, GlobalRole.LANDLORD, GlobalRole.STAFF)
   delete(@Param('id') id: string) {
     return this.tenantsService.delete(id);
   }
 
-  @ApiOperation({ summary: 'Bulk delete/deactivate tenants — Admin only' })
+  @ApiOperation({ summary: 'Bulk delete/deactivate tenants — Admin/Landlord/Staff' })
   @Post('bulk-delete')
-  @Roles(GlobalRole.SAAS_ADMIN)
+  @Roles(GlobalRole.SAAS_ADMIN, GlobalRole.LANDLORD, GlobalRole.STAFF)
   bulkDelete(@Body() dto: { ids: string[] }) {
     return this.tenantsService.bulkDelete(dto.ids);
   }

@@ -451,7 +451,7 @@ export class AgreementsService {
 
   // ─── LIST AGREEMENTS ──────────────────────────
   async findAll(landlordId: string, status?: AgreementStatus) {
-    const where: any = { landlord_id: landlordId };
+    const where: any = { landlord_id: landlordId, is_archived: false };
     if (status) where.status = status;
 
     return this.prisma.rentalAgreement.findMany({
@@ -475,7 +475,7 @@ export class AgreementsService {
   // Includes all agreements across all landlords — portable rental history
   async findTenantHistory(tenantId: string) {
     return this.prisma.rentalAgreement.findMany({
-      where: { tenant_id: tenantId },
+      where: { tenant_id: tenantId, is_archived: false },
       orderBy: { start_date: 'desc' },
       include: {
         property: { select: { name: true, address: true, type: true } },
@@ -492,7 +492,7 @@ export class AgreementsService {
 
   // ─── GET SINGLE AGREEMENT ─────────────────────
   async findOne(landlordId: string | null, agreementId: string) {
-    const where: any = { id: agreementId };
+    const where: any = { id: agreementId, is_archived: false };
     if (landlordId) {
       where.landlord_id = landlordId;
     }
@@ -513,7 +513,7 @@ export class AgreementsService {
 
   // ─── SYSTEM ADMIN: LIST ALL AGREEMENTS ─────────
   async findAllAdmin(status?: AgreementStatus) {
-    const where: any = {};
+    const where: any = { is_archived: false };
     if (status) where.status = status;
 
     return this.prisma.rentalAgreement.findMany({
@@ -600,6 +600,29 @@ export class AgreementsService {
     );
 
     return updated;
+  }
+
+  // ─── SOFT DELETE AGREEMENT (Landlord/Staff/Admin) ──────────
+  async delete(landlordId: string | null, id: string) {
+    const whereClause: any = { id };
+    if (landlordId) {
+      whereClause.landlord_id = landlordId;
+    }
+
+    const agreement = await this.prisma.rentalAgreement.findFirst({
+      where: whereClause,
+    });
+
+    if (!agreement) throw new NotFoundException('Rental agreement not found');
+
+    if (agreement.status === AgreementStatus.ACTIVE || agreement.status === AgreementStatus.TERMINATION_REQUESTED) {
+      throw new BadRequestException('Cannot delete an active lease agreement. Terminate it first.');
+    }
+
+    return this.prisma.rentalAgreement.update({
+      where: { id },
+      data: { is_archived: true },
+    });
   }
 }
 

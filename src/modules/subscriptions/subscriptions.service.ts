@@ -119,8 +119,9 @@ export class SubscriptionsService {
       );
     }
 
-    return this.prisma.subscriptionPackage.delete({
+    return this.prisma.subscriptionPackage.update({
       where: { id: packageId },
+      data: { is_archived: true, archived_at: new Date() },
     });
   }
 

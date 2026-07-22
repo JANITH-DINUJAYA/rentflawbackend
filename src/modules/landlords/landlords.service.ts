@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { GlobalRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -111,6 +111,12 @@ export class LandlordsService {
 
   async delete(id: string) {
     const landlord = await this.findOne(id);
+    const activeCount = await this.prisma.rentalAgreement.count({
+      where: { landlord_id: id, status: 'ACTIVE' },
+    });
+    if (activeCount > 0) {
+      throw new BadRequestException('Cannot delete landlord with active lease agreements. Terminate the agreements first.');
+    }
     return this.prisma.user.update({
       where: { id: landlord.user_id },
       data: { is_active: false },
@@ -118,6 +124,12 @@ export class LandlordsService {
   }
 
   async bulkDelete(ids: string[]) {
+    const activeCount = await this.prisma.rentalAgreement.count({
+      where: { landlord_id: { in: ids }, status: 'ACTIVE' },
+    });
+    if (activeCount > 0) {
+      throw new BadRequestException('Cannot delete landlords with active lease agreements. Terminate the agreements first.');
+    }
     const landlords = await this.prisma.landlord.findMany({
       where: { id: { in: ids } },
       select: { user_id: true },
