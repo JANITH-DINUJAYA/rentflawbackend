@@ -67,6 +67,12 @@ export class StaffService {
       if (existingStaff) {
         throw new ForbiddenException('User is already assigned as staff.');
       }
+      // Promote existing user to STAFF role so they can login via landlord portal
+      const targetRole = landlordId === null ? GlobalRole.SAAS_ADMIN : GlobalRole.STAFF;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { global_role: targetRole },
+      });
     }
 
     return this.prisma.staffProfile.create({
@@ -84,12 +90,21 @@ export class StaffService {
         id: staffId,
         ...(landlordId ? { landlord_id: landlordId } : {}),
       },
+      include: { user: { select: { id: true } } },
     });
     if (!member) throw new NotFoundException('Staff member not found');
 
-    return this.prisma.staffProfile.delete({
+    await this.prisma.staffProfile.delete({
       where: { id: staffId },
     });
+
+    // Revert global_role back to TENANT so they lose landlord portal access
+    await this.prisma.user.update({
+      where: { id: member.user.id },
+      data: { global_role: GlobalRole.TENANT },
+    });
+
+    return { message: 'Staff member removed successfully.' };
   }
 
   async getStaff(landlordId: string | null) {

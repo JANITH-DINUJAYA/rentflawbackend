@@ -76,4 +76,11 @@ export class SystemController {
   deleteBankAccount(@Param('id') id: string) {
     return this.systemService.deleteBankAccount(id);
   }
+
+  @ApiOperation({ summary: 'Fix global_role for staff members with wrong role — SAAS_ADMIN only' })
+  @Post('fix-staff-roles')
+  @Roles(GlobalRole.SAAS_ADMIN)
+  fixStaffRoles() {
+    return this.systemService.fixStaffGlobalRoles();
+  }
 }

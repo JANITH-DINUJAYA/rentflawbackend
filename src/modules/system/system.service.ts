@@ -101,4 +101,30 @@ export class SystemService {
     this.addLog('WARNING', 'SystemConfig', `Deleted system bank account ${id}`);
     return { message: 'Bank account deleted' };
   }
+
+  // ─── DATA INTEGRITY FIXES ──────────────────────
+
+  /** Fix global_role for staff members who were added when they already had a TENANT/LANDLORD role */
+  async fixStaffGlobalRoles() {
+    // Landlord staff who still have wrong global_role
+    const landlordStaff = await this.prisma.staffProfile.findMany({
+      where: {
+        landlord_id: { not: null },
+        user: { global_role: { notIn: ['STAFF', 'SAAS_ADMIN'] } },
+      },
+      include: { user: { select: { id: true, email: true, global_role: true } } },
+    });
+
+    const fixed: string[] = [];
+    for (const sp of landlordStaff) {
+      await this.prisma.user.update({
+        where: { id: sp.user.id },
+        data: { global_role: 'STAFF' },
+      });
+      fixed.push(`${sp.user.email}: ${sp.user.global_role} → STAFF`);
+    }
+
+    this.addLog('INFO', 'SystemMaintenance', `Fixed global_role for ${fixed.length} staff member(s)`);
+    return { fixed_count: fixed.length, details: fixed };
+  }
 }
