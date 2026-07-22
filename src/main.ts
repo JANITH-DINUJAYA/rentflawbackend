@@ -5,8 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
-
-async function bootstrap() {
+async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
   // ─── CORS (must be BEFORE helmet) ────────────
@@ -18,7 +17,10 @@ async function bootstrap() {
   ].filter(Boolean) as string[];
 
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       // Allow requests with no origin (curl, Swagger, mobile apps)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -36,11 +38,12 @@ async function bootstrap() {
   });
 
   // ─── Security (after CORS) ─────────────────────
-  app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  }));
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cookieParser());
-
 
   // ─── Global Prefix ────────────────────────────
   app.setGlobalPrefix('api');
@@ -49,9 +52,9 @@ async function bootstrap() {
   // Strips unknown properties, transforms types, and validates all DTOs
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,          // Strip unknown fields
+      whitelist: true, // Strip unknown fields
       forbidNonWhitelisted: true, // Throw on unknown fields
-      transform: true,          // Auto-transform payloads to DTO types
+      transform: true, // Auto-transform payloads to DTO types
       transformOptions: {
         enableImplicitConversion: true,
       },
@@ -77,4 +80,4 @@ async function bootstrap() {
     console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`);
   }
 }
-bootstrap();
+void bootstrap();
