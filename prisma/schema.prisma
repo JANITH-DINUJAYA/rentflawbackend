@@ -41,6 +41,8 @@ enum PropertyType {
 enum OccupancyType {
   ENTIRE
   SHARED
+  SINGLE
+  STUDIO
 }
 
 enum AgreementStatus {

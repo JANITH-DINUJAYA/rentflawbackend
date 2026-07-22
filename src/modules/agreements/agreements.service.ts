@@ -87,8 +87,8 @@ export class AgreementsService {
     });
     if (!room) throw new NotFoundException('Room not found');
 
-    // Check room capacity for ENTIRE rooms
-    if (room.occupancy_type === OccupancyType.ENTIRE) {
+    // Check room capacity for ENTIRE / SINGLE / STUDIO rooms
+    if (room.occupancy_type === OccupancyType.ENTIRE || room.occupancy_type === OccupancyType.SINGLE || room.occupancy_type === OccupancyType.STUDIO) {
       const activeOnRoom = await this.prisma.rentalAgreement.count({
         where: { room_id: dto.room_id, status: AgreementStatus.ACTIVE },
       });
