@@ -61,17 +61,19 @@ export class SubscriptionEnforcementMiddleware implements NestMiddleware {
       throw new ForbiddenException('No active subscription found');
     }
 
-    // Block write operations for SUSPENDED accounts
-    if (subscription.status === 'SUSPENDED') {
+    const isExpired = subscription.end_date && new Date(subscription.end_date) < new Date();
+
+    // Block write operations for SUSPENDED or EXPIRED accounts
+    if (subscription.status === 'SUSPENDED' || (isExpired && subscription.status !== 'ACTIVE' && subscription.status !== 'TRIAL')) {
       throw new ForbiddenException(
-        'Your account is suspended. Please renew your subscription.',
+        'Your subscription has expired or is suspended. Please renew your subscription.',
       );
     }
 
-    // Enforce read-only mode for PAST_DUE
-    if (subscription.status === 'PAST_DUE' && req.method !== 'GET') {
+    // Enforce read-only mode for PAST_DUE or EXPIRED
+    if ((subscription.status === 'PAST_DUE' || isExpired) && req.method !== 'GET') {
       throw new ForbiddenException(
-        'Subscription payment overdue. Data is in read-only mode.',
+        'Subscription has expired or payment is overdue. Data is in read-only mode.',
       );
     }
 

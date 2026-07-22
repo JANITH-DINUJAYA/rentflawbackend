@@ -29,6 +29,9 @@ export class OverdueDetectionProcessor extends WorkerHost {
       // Step 3: Mark expired agreements
       await this.markExpiredAgreements();
 
+      // Step 4: Mark expired landlord subscriptions
+      await this.markExpiredSubscriptions();
+
       return { success: true };
     } catch (error) {
       this.logger.error('Overdue detection job execution failed', error);
@@ -79,5 +82,20 @@ export class OverdueDetectionProcessor extends WorkerHost {
     });
 
     this.logger.log(`Marked ${result.count} agreements as EXPIRED`);
+  }
+
+  private async markExpiredSubscriptions() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await this.prisma.landlordSubscription.updateMany({
+      where: {
+        status: { in: ['ACTIVE', 'TRIAL'] },
+        end_date: { lt: today },
+      },
+      data: { status: 'PAST_DUE' },
+    });
+
+    this.logger.log(`Marked ${result.count} subscriptions as PAST_DUE`);
   }
 }
