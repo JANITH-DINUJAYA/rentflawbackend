@@ -33,9 +33,22 @@ export class FilesService {
     const timestamp = Math.round(new Date().getTime() / 1000).toString();
     const folder = 'rentflaw_receipts';
 
+    // Sanitize and generate unique public_id preserving file extension
+    const extIndex = file.originalname.lastIndexOf('.');
+    const ext = extIndex !== -1 ? file.originalname.substring(extIndex) : '';
+    const baseName = extIndex !== -1 ? file.originalname.substring(0, extIndex) : file.originalname;
+    const sanitizedBase = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    // For raw files (PDFs) to load correctly in browser, Cloudinary needs the extension in the public_id
+    const publicId = `${Date.now()}_${sanitizedBase}${ext.toLowerCase()}`;
+
+    // Determine target resource endpoint (images vs generic files/PDFs)
+    const isImage = file.mimetype.startsWith('image/');
+    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+    const resourceType = (isImage || isPdf) ? 'image' : 'raw';
+
     // Cloudinary signature generation:
-    // Sort parameters alphabetically, join with & and append apiSecret at the end.
-    const paramString = `folder=${folder}&timestamp=${timestamp}`;
+    // Sort parameters alphabetically: folder, public_id, timestamp, join with & and append apiSecret at the end.
+    const paramString = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
     const signature = crypto
       .createHash('sha1')
       .update(paramString + apiSecret)
@@ -53,12 +66,8 @@ export class FilesService {
     formData.append('api_key', apiKey);
     formData.append('timestamp', timestamp);
     formData.append('folder', folder);
+    formData.append('public_id', publicId);
     formData.append('signature', signature);
-
-    // Determine target resource endpoint (images vs generic files/PDFs)
-    const isImage = file.mimetype.startsWith('image/');
-    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
-    const resourceType = (isImage || isPdf) ? 'image' : 'raw';
 
     try {
       const response = await fetch(

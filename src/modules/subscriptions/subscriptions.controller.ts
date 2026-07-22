@@ -205,8 +205,8 @@ export class SubscriptionsController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(GlobalRole.SAAS_ADMIN)
   @Patch('bank-payments/:id/reject')
-  rejectBankPayment(@Param('id') id: string, @Body() dto: { notes?: string }) {
-    return this.subscriptionsService.rejectBankPayment(id, dto.notes);
+  rejectBankPayment(@Param('id') id: string, @Body() dto?: { notes?: string }) {
+    return this.subscriptionsService.rejectBankPayment(id, dto?.notes);
   }
 
   @ApiOperation({ summary: 'Update a subscription package — Admin only' })
