@@ -13,7 +13,7 @@ import { PropertiesService } from './properties.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { GlobalRole, PropertyType } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 
 @ApiTags('Properties')
 @ApiBearerAuth()
@@ -34,7 +34,7 @@ export class PropertiesController {
   @Roles(GlobalRole.LANDLORD, GlobalRole.STAFF)
   create(
     @CurrentUser() user: any,
-    @Body() dto: { name: string; address: string; type: PropertyType },
+    @Body() dto: { name: string; address: string; type: string },
   ) {
     const landlordId = user.landlord_profile?.id || user.staff_profile?.landlord_id;
     return this.propertiesService.create(landlordId, dto);
@@ -60,7 +60,7 @@ export class PropertiesController {
   update(
     @CurrentUser() user: any,
     @Param('id') id: string,
-    @Body() dto: { name?: string; address?: string; type?: PropertyType },
+    @Body() dto: { name?: string; address?: string; type?: string },
   ) {
     return this.propertiesService.update(this.getLandlordId(user), id, dto);
   }

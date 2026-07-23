@@ -31,13 +31,6 @@ enum SubscriptionStatus {
   SUSPENDED
 }
 
-enum PropertyType {
-  BOARDING_HOUSE
-  HOSTEL
-  RENTAL_HOUSE
-  APARTMENT
-}
-
 enum OccupancyType {
   ENTIRE
   SHARED
@@ -267,7 +260,7 @@ model Property {
   landlord_id String       @db.VarChar(36)
   name        String       @db.VarChar(150)
   address     String       @db.Text
-  type        PropertyType
+  type        String       @db.VarChar(100)
   is_archived Boolean      @default(false)
 
   created_at DateTime @default(now())

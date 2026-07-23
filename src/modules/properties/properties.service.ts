@@ -5,7 +5,6 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { PropertyType } from '@prisma/client';
 import {
   enforcePropertyLimit,
 } from '../../common/middleware/subscription.middleware';
@@ -17,7 +16,7 @@ export class PropertiesService {
   // ─── CREATE PROPERTY ───────────────────────────
   async create(
     landlordId: string,
-    dto: { name: string; address: string; type: PropertyType },
+    dto: { name: string; address: string; type: string },
   ) {
     // Fetch subscription limits and enforce before creating
     const sub = await this.prisma.landlordSubscription.findUnique({
@@ -96,7 +95,7 @@ export class PropertiesService {
   async update(
     landlordId: string | null,
     propertyId: string,
-    dto: { name?: string; address?: string; type?: PropertyType },
+    dto: { name?: string; address?: string; type?: string },
   ) {
     await this.findOne(landlordId, propertyId);
     return this.prisma.property.update({
